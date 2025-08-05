@@ -3,37 +3,59 @@
  * * 功能：
  * 1. 遍歷頁面上所有的貼文（.post）。
  * 2. 在每個貼文的標頭（.post-head）中插入一個「記憶此串」按鈕。
- * 3. 點擊按鈕時，收集貼文資訊（編號、預覽文字），並產生該串專屬的網址。
- * 4. 將資訊發送給 background.js 進行儲存。
- * 5. 使用 MutationObserver 來監聽動態載入的內容（如展開的回應），並為新內容加上按鈕。
+ * 3. 點擊按鈕時，收集貼文資訊並發送給 background.js 進行儲存。
+ * 4. 使用 MutationObserver 來監聽動態載入的內容。
+ * 5. **優化：監聽來自 background 的明確指令，直接更新 UI。**
  */
 
-// 檢查儲存狀態並更新按鈕樣式
-async function updateButtonState(button, postNo) {
-    const result = await browser.runtime.sendMessage({ action: 'isPostSaved', postNo: postNo });
-    if (result && result.isSaved) {
+// **優化：監聽來自 background script 的 UI 更新指令**
+browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message.action === 'updateButtonUI') {
+        const { postNo, isSaved } = message;
+        const postElement = document.querySelector(`.post[data-no="${postNo}"]`);
+        if (postElement) {
+            const saveButton = postElement.querySelector('.komica-saver-btn');
+            if (saveButton) {
+                console.log(`[Komica Saver] 收到 UI 更新通知 No.${postNo}, isSaved: ${isSaved}`);
+                // 直接根據指令更新按鈕外觀，不再查詢
+                setButtonAppearance(saveButton, isSaved);
+            }
+        }
+    }
+    return true; // 保持訊息通道開啟
+});
+
+// **新增：一個專門用來更新按鈕外觀的同步函式**
+function setButtonAppearance(button, isSaved) {
+    if (isSaved) {
         button.textContent = '[已記憶]';
-        button.style.color = '#28a745'; // Green color for saved state
+        button.style.color = '#28a745';
         button.style.fontWeight = 'bold';
     } else {
         button.textContent = '[記憶此串]';
-        button.style.color = ''; // Reset to default color
+        button.style.color = '';
         button.style.fontWeight = '';
+    }
+}
+
+// 檢查儲存狀態並更新按鈕樣式（用於頁面載入和動態新增元素）
+async function updateButtonState(button, postNo) {
+    const result = await browser.runtime.sendMessage({ action: 'isPostSaved', postNo: postNo });
+    if (result) {
+        setButtonAppearance(button, result.isSaved);
     }
 }
 
 // 為指定的貼文元素添加「記憶」按鈕
 function addSaveButtonToPost(postElement) {
     const postNo = postElement.dataset.no;
-    if (!postNo) return; // 如果找不到貼文編號，就跳過
+    if (!postNo) return; 
 
-    // 檢查是否已經有按鈕，防止重複添加
     if (postElement.querySelector('.komica-saver-btn')) {
         updateButtonState(postElement.querySelector('.komica-saver-btn'), postNo);
         return;
     }
 
-    // 創建按鈕
     const saveButton = document.createElement('span');
     saveButton.className = 'komica-saver-btn text-button';
     saveButton.style.marginLeft = '5px';
@@ -42,7 +64,6 @@ function addSaveButtonToPost(postElement) {
 
     updateButtonState(saveButton, postNo);
 
-    // 按鈕點擊事件
     saveButton.addEventListener('click', async () => {
         const threadElement = postElement.closest('.thread');
         if (!threadElement) {
@@ -54,8 +75,6 @@ function addSaveButtonToPost(postElement) {
         const boardPath = pathParts.length > 1 ? `/${pathParts[1]}/` : '/';
         const dedicatedThreadUrl = `${window.location.origin}${boardPath}pixmicat.php?res=${threadNo}`;
         
-        console.log(`[Komica Saver] 準備儲存的網址: ${dedicatedThreadUrl}`);
-
         const quoteElement = postElement.querySelector('.quote');
         const titleElement = postElement.querySelector('.post-head .title');
         const title = titleElement && titleElement.innerText.trim() !== '無題' ? titleElement.innerText.trim() : `No.${postNo}`;
@@ -76,20 +95,16 @@ function addSaveButtonToPost(postElement) {
         await updateButtonState(saveButton, postNo);
     });
 
-    // 將按鈕插入到 post-head 中
     const postHead = postElement.querySelector('.post-head');
     if (postHead) {
         const replyLink = postHead.querySelector('.rlink');
         if (replyLink) {
-            // **修正：如果找到 [回應] 連結，就插在它後面**
             replyLink.after(saveButton);
         } else {
-            // 如果沒有 [回應] 連結 (例如在回應中)，就插在 [del] 按鈕前面
             const delButton = postHead.querySelector('.-del-button');
             if (delButton) {
                 postHead.insertBefore(saveButton, delButton);
             } else {
-                // 如果連 del 都沒有，就直接加到最後
                 postHead.appendChild(saveButton);
             }
         }

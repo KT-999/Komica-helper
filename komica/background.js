@@ -4,7 +4,8 @@
  * 功能：
  * 1. 監聽來自 content_script 和 popup 的訊息。
  * 2. 處理貼文的儲存、刪除、讀取請求。
- * 3. 使用 browser.storage.local API 進行資料持久化。
+ * 3. 刪除貼文後，主動通知所有 Komica 分頁更新 UI 狀態。
+ * 4. 使用 browser.storage.local API 進行資料持久化。
  */
 
 // 初始化儲存
@@ -39,12 +40,9 @@ async function toggleSavePost(postData) {
         const existingIndex = posts.findIndex(p => p.id === postData.id);
 
         if (existingIndex > -1) {
-            // 如果已存在，則刪除（取消儲存）
             posts.splice(existingIndex, 1);
         } else {
-            // 如果不存在，則新增
             posts.push(postData);
-            // 讓最新的在最上面
             posts.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
         }
 
@@ -67,13 +65,29 @@ async function getAllPosts() {
     }
 }
 
-// 刪除指定的貼文
+// 刪除指定的貼文，並通知 content script
 async function deletePost(postId) {
     try {
         const result = await browser.storage.local.get({ savedPosts: [] });
         let posts = result.savedPosts;
+        
+        const postToDelete = posts.find(p => p.id === postId);
+        if (!postToDelete) return { success: false, error: 'Post not found' };
+
         posts = posts.filter(p => p.id !== postId);
         await browser.storage.local.set({ savedPosts: posts });
+
+        // **修正：查詢所有 Komica 分頁，而不僅僅是特定 URL 的分頁**
+        const tabs = await browser.tabs.query({ url: "https://gita.komica1.org/*" });
+        for (const tab of tabs) {
+            browser.tabs.sendMessage(tab.id, {
+                action: 'updateButtonUI', // 明確的指令
+                postNo: postToDelete.postNo,
+                isSaved: false // 明確告知新的狀態
+            }).catch(e => console.log(`Could not send message to tab ${tab.id}, it might be closed or protected.`));
+        }
+
+        console.log(`Post ${postId} deleted and all Komica tabs notified.`);
         return { success: true };
     } catch (error) {
         console.error('Error deleting post:', error);
