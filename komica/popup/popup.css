@@ -1,0 +1,131 @@
+/* popup/popup.css */
+body {
+    width: 380px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+    font-size: 14px;
+    background-color: #f9f9f9;
+}
+
+.header {
+    background-color: #ececec;
+    padding: 12px;
+    border-bottom: 1px solid #ccc;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+h1 {
+    margin: 0;
+    font-size: 16px;
+    text-align: center;
+    color: #333;
+}
+
+#posts-container {
+    max-height: 420px; /* Adjusted height */
+    overflow-y: auto;
+}
+
+.post-item {
+    display: flex;
+    align-items: flex-start;
+    padding: 12px;
+    border-bottom: 1px solid #e0e0e0;
+    text-decoration: none;
+    color: #333;
+    transition: background-color 0.2s;
+}
+
+.post-item:hover {
+    background-color: #f0f0f0;
+}
+
+.post-content {
+    flex-grow: 1;
+    cursor: pointer;
+    overflow: hidden;
+}
+
+.post-title {
+    font-weight: bold;
+    color: #0056b3;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.post-preview {
+    margin-top: 6px;
+    font-size: 13px;
+    color: #555;
+    line-height: 1.4;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
+    overflow: hidden;
+}
+
+.delete-btn {
+    flex-shrink: 0;
+    margin-left: 12px;
+    padding: 5px 10px;
+    border: 1px solid #dcdcdc;
+    background-color: #fff;
+    color: #d9534f;
+    cursor: pointer;
+    border-radius: 4px;
+    font-size: 12px;
+    transition: all 0.2s;
+}
+
+.delete-btn:hover {
+    background-color: #d9534f;
+    color: white;
+    border-color: #c9302c;
+}
+
+.footer {
+    padding: 10px;
+    background-color: #f0f0f0;
+    border-top: 1px solid #ccc;
+    text-align: center;
+}
+
+.footer label {
+    display: inline-flex;
+    align-items: center;
+    cursor: pointer;
+    font-size: 13px;
+    color: #333;
+}
+
+.footer input[type="checkbox"] {
+    margin-right: 6px;
+    vertical-align: middle;
+}
+
+#empty-message {
+    padding: 30px;
+    text-align: center;
+    color: #888;
+    font-size: 15px;
+}
+
+.loader {
+    border: 4px solid #f3f3f3;
+    border-radius: 50%;
+    border-top: 4px solid #3498db;
+    width: 20px;
+    height: 20px;
+    animation: spin 1s linear infinite;
+    margin: 20px auto;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}

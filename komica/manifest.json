@@ -1,0 +1,35 @@
+{
+  "manifest_version": 3,
+  "name": "Komica 貼文記憶器",
+  "version": "1.0.0",
+  "description": "在 gita.komica1.org 的貼文旁新增記憶按鈕，方便稍後查看。",
+  "permissions": [
+    "storage",
+    "tabs"
+  ],
+  "host_permissions": [
+    "https://gita.komica1.org/*"
+  ],
+  "background": {
+    "scripts": ["background.js"]
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://gita.komica1.org/*/*.htm*"],
+      "js": ["content_script.js"],
+      "css": []
+    }
+  ],
+  "action": {
+    "default_icon": {
+      "48": "icons/icon-48.png",
+      "96": "icons/icon-96.png"
+    },
+    "default_title": "Komica 貼文記憶器",
+    "default_popup": "popup/popup.html"
+  },
+  "icons": {
+    "48": "icons/icon-48.png",
+    "96": "icons/icon-96.png"
+  }
+}
