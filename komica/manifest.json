@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Komica 貼文記憶器",
-  "version": "1.1.0",
-  "description": "在 gita.komica1.org 的貼文旁新增記憶按鈕，方便稍後查看並追蹤更新。",
+  "version": "1.2.0",
+  "description": "在 gita.komica1.org 的貼文旁新增記憶、隱藏按鈕，並提供 NGID 過濾功能，方便您追蹤與管理討論串。",
   "permissions": [
     "storage",
     "tabs",
@@ -16,8 +16,12 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://gita.komica1.org/*/*"],
-      "js": ["content_script.js"]
+      "matches": [
+        "https://gita.komica1.org/*/*"
+      ],
+      "js": [
+        "content_script.js"
+      ]
     }
   ],
   "action": {

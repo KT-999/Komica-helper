@@ -10,53 +10,65 @@ body {
 
 .header {
     background-color: #ececec;
-    padding: 12px;
+    padding: 0;
     border-bottom: 1px solid #ccc;
-    position: sticky;
-    top: 0;
-    z-index: 10;
 }
 
-h1 {
-    margin: 0;
-    font-size: 16px;
-    text-align: center;
-    color: #333;
+/* 分頁樣式 */
+.tabs {
+    display: flex;
+}
+.tab-btn {
+    flex: 1;
+    padding: 10px;
+    border: none;
+    background-color: #ececec;
+    cursor: pointer;
+    font-size: 14px;
+    border-bottom: 3px solid transparent;
+    transition: all 0.2s;
+}
+.tab-btn:hover {
+    background-color: #e0e0e0;
+}
+.tab-btn.active {
+    border-bottom-color: #007bff;
+    font-weight: bold;
 }
 
-#posts-container {
-    max-height: 380px; /* Adjusted height */
+/* 內容面板 */
+.content-panel {
+    display: none;
+    max-height: 340px;
     overflow-y: auto;
 }
+.content-panel.active {
+    display: block;
+}
 
-.post-item {
+.post-item, .hidden-item, .ngid-item {
     display: flex;
     align-items: center;
     padding: 12px;
     border-bottom: 1px solid #e0e0e0;
-    text-decoration: none;
     color: #333;
-    transition: background-color 0.2s;
 }
-
-.post-item:hover {
+.post-item:hover, .hidden-item:hover, .ngid-item:hover {
     background-color: #f0f0f0;
 }
 
-.post-content {
+.post-content, .hidden-content, .ngid-text {
     flex-grow: 1;
-    cursor: pointer;
     overflow: hidden;
 }
+.post-content { cursor: pointer; }
+.hidden-content, .ngid-text { font-weight: bold; }
+.ngid-text { font-family: monospace; }
 
 .post-title {
     font-weight: bold;
-    color: #0056b3;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    color: #333;
 }
-
 .post-preview {
     margin-top: 6px;
     font-size: 13px;
@@ -69,7 +81,6 @@ h1 {
     overflow: hidden;
 }
 
-/* 更新提示徽章樣式 */
 .update-indicator {
     background-color: #d9534f;
     color: white;
@@ -79,81 +90,68 @@ h1 {
     font-weight: bold;
     margin-right: 10px;
     flex-shrink: 0;
-    line-height: 1;
 }
 
-.delete-btn {
+.action-btn {
     flex-shrink: 0;
     margin-left: 12px;
     padding: 5px 10px;
     border: 1px solid #dcdcdc;
     background-color: #fff;
-    color: #d9534f;
     cursor: pointer;
     border-radius: 4px;
     font-size: 12px;
     transition: all 0.2s;
 }
-
-.delete-btn:hover {
-    background-color: #d9534f;
-    color: white;
-    border-color: #c9302c;
-}
+.delete-btn { color: #d9534f; }
+.delete-btn:hover { background-color: #d9534f; color: white; border-color: #c9302c; }
+.unhide-btn { color: #28a745; }
+.unhide-btn:hover { background-color: #28a745; color: white; border-color: #218838; }
 
 .footer {
     padding: 8px 12px;
     background-color: #f0f0f0;
     border-top: 1px solid #ccc;
 }
-
 .setting-row {
     display: flex;
     justify-content: space-between;
     align-items: center;
 }
-.setting-row:not(:last-child) {
-    margin-bottom: 8px;
-}
+.setting-row:not(:last-child) { margin-bottom: 8px; }
+.setting-item label { display: inline-flex; align-items: center; cursor: pointer; font-size: 13px; color: #333; }
+.setting-item input[type="checkbox"] { margin-right: 6px; }
+.setting-item input[type="number"] { width: 50px; margin-left: 8px; border: 1px solid #ccc; border-radius: 3px; padding: 2px 4px; }
 
-.setting-item label {
-    display: inline-flex;
-    align-items: center;
-    cursor: pointer;
-    font-size: 13px;
-    color: #333;
-}
-
-.setting-item input[type="checkbox"] {
-    margin-right: 6px;
-}
-
-.setting-item input[type="number"] {
-    width: 50px;
-    margin-left: 8px;
-    border: 1px solid #ccc;
-    border-radius: 3px;
-    padding: 2px 4px;
-}
-
-#empty-message {
+#empty-message, .loader {
     padding: 30px;
     text-align: center;
     color: #888;
     font-size: 15px;
 }
-
 .loader {
-    border: 4px solid #f3f3f3;
-    border-radius: 50%;
-    border-top: 4px solid #3498db;
-    width: 20px;
-    height: 20px;
-    animation: spin 1s linear infinite;
-    margin: 20px auto;
+    padding: 15px;
+    font-size: 14px;
 }
 
-@keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
+.ngid-input-area {
+    display: flex;
+    padding: 10px;
+    border-bottom: 1px solid #e0e0e0;
 }
+#ngid-input {
+    flex-grow: 1;
+    border: 1px solid #ccc;
+    padding: 6px;
+    border-radius: 4px;
+}
+#add-ngid-btn {
+    margin-left: 8px;
+    padding: 6px 12px;
+    border: 1px solid #007bff;
+    background-color: #007bff;
+    color: white;
+    border-radius: 4px;
+    cursor: pointer;
+}
+#add-ngid-btn:hover { background-color: #0056b3; }
