@@ -3,11 +3,9 @@
  *
  * 功能：
  * 1. DOM 載入後，向 background.js 請求所有已儲存的貼文。
- * 2. 載入並套用使用者設定（如：是否在新分頁開啟、最大記錄量）。
- * 3. 動態生成貼文列表並顯示在彈出視窗中。
- * 4. 為每個貼文項目添加點擊事件，並根據設定決定開啟方式。
- * 5. 為刪除按鈕添加點擊事件，以刪除該筆紀錄。
- * 6. 監聽設定變更並儲存。
+ * 2. 載入並套用使用者設定。
+ * 3. 新增：當最大記錄量變更時，立即觸發背景修剪流程並重整列表。
+ * 4. 動態生成貼文列表並顯示在彈出視窗中。
  */
 
 // DOM 載入後執行
@@ -21,38 +19,41 @@ const maxRecordsInput = document.getElementById('max-records-input');
 
 // 初始化設定
 async function initializeSettings() {
-    // 從儲存空間讀取設定
     const settings = await browser.storage.local.get({
-        openInNewTab: true, // 預設在新分頁開啟
-        maxRecords: 50      // 預設最大記錄量為 50
+        openInNewTab: true,
+        maxRecords: 50
     });
     
-    // 設定 checkbox
     openInNewTabCheckbox.checked = settings.openInNewTab;
     openInNewTabCheckbox.addEventListener('change', () => {
         browser.storage.local.set({ openInNewTab: openInNewTabCheckbox.checked });
     });
 
-    // 設定最大記錄量輸入框
     maxRecordsInput.value = settings.maxRecords;
-    maxRecordsInput.addEventListener('change', () => {
+    // **修正：當設定變更時，觸發修剪並重整 UI**
+    maxRecordsInput.addEventListener('change', async () => {
         let value = parseInt(maxRecordsInput.value, 10);
         if (isNaN(value) || value < 1) {
-            value = 1; // 最小值為 1
+            value = 1;
             maxRecordsInput.value = value;
         }
-        browser.storage.local.set({ maxRecords: value });
+        // 儲存新設定
+        await browser.storage.local.set({ maxRecords: value });
+        // 發送訊息給背景，要求立即根據新設定修剪紀錄
+        await browser.runtime.sendMessage({ action: 'trimRecords' });
+        // 重新載入列表以反映變更
+        loadPosts();
     });
 }
 
 // 載入所有已儲存的貼文
 async function loadPosts() {
     const container = document.getElementById('posts-container');
-    container.innerHTML = '<div class="loader"></div>'; // 顯示讀取中
+    container.innerHTML = '<div class="loader"></div>';
     
     try {
         const response = await browser.runtime.sendMessage({ action: 'getAllPosts' });
-        container.innerHTML = ''; // 清空 loader
+        container.innerHTML = '';
 
         if (response.success && response.data) {
             const posts = response.data;
@@ -60,7 +61,6 @@ async function loadPosts() {
                 container.innerHTML = '<div id="empty-message">尚未記憶任何貼文</div>';
                 return;
             }
-
             posts.forEach(post => {
                 const postElement = createPostElement(post);
                 container.appendChild(postElement);
@@ -100,7 +100,6 @@ function createPostElement(post) {
     deleteBtn.textContent = '刪除';
     deleteBtn.title = '刪除此筆紀錄';
 
-    // 點擊內容區域：跳轉到貼文
     content.addEventListener('click', async () => {
         const targetUrl = `${post.url}#r${post.postNo}`;
         const shouldOpenInNewTab = openInNewTabCheckbox.checked;
@@ -125,7 +124,6 @@ function createPostElement(post) {
         window.close();
     });
 
-    // 點擊刪除按鈕
     deleteBtn.addEventListener('click', async (e) => {
         e.stopPropagation();
         item.style.opacity = '0.5';

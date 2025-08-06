@@ -4,9 +4,9 @@
  * 功能：
  * 1. 監聽來自 content_script 和 popup 的訊息。
  * 2. 處理貼文的儲存、刪除、讀取請求。
- * 3. 儲存新貼文時，根據設定的最大數量自動修剪最舊的紀錄，並通知頁面更新。
- * 4. 刪除貼文後，主動通知所有 Komica 分頁更新 UI 狀態。
- * 5. 使用 browser.storage.local API 進行資料持久化。
+ * 3. 新增：處理來自 popup 的即時修剪請求。
+ * 4. 儲存新貼文時，根據設定的最大數量自動修剪最舊的紀錄，並通知頁面更新。
+ * 5. 刪除貼文後，主動通知所有 Komica 分頁更新 UI 狀態。
  */
 
 // 初始化儲存
@@ -32,6 +32,9 @@ browser.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
             return await deletePost(message.id);
         case 'isPostSaved':
             return await isPostSaved(message.postNo);
+        // **新增：處理即時修剪的請求**
+        case 'trimRecords':
+            return await trimRecords();
     }
     return true; // 表示非同步處理
 });
@@ -46,22 +49,13 @@ async function toggleSavePost(postData) {
         const existingIndex = posts.findIndex(p => p.id === postData.id);
 
         if (existingIndex > -1) {
-            // 如果已存在，則刪除 (取消儲存)
             posts.splice(existingIndex, 1);
         } else {
-            // 如果是新貼文，直接加到陣列的最前面
             posts.unshift(postData);
-
-            // **修正：檢查是否超出最大記錄量，如果超出則修剪並通知**
             if (posts.length > maxRecords) {
-                // 找出將被移除的舊紀錄
                 const postsToRemove = posts.slice(maxRecords);
-                
-                // 修剪陣列
                 posts.length = maxRecords; 
                 console.log(`[Komica Saver] 紀錄已修剪至上限 ${maxRecords} 筆。`);
-
-                // 為每一筆被移除的紀錄發送更新通知
                 for (const removedPost of postsToRemove) {
                     notifyTabsOfUpdate(removedPost.postNo, false);
                 }
@@ -75,6 +69,31 @@ async function toggleSavePost(postData) {
         return { success: false, error: error.message };
     }
 }
+
+// **新增：根據使用者設定即時修剪紀錄的函式**
+async function trimRecords() {
+    try {
+        const result = await browser.storage.local.get(['savedPosts', 'maxRecords']);
+        let posts = result.savedPosts || [];
+        const maxRecords = result.maxRecords || 50;
+
+        if (posts.length > maxRecords) {
+            const postsToRemove = posts.slice(maxRecords);
+            posts.length = maxRecords;
+            await browser.storage.local.set({ savedPosts: posts });
+            console.log(`[Komica Saver] 紀錄已由使用者設定修剪至 ${maxRecords} 筆。`);
+
+            for (const removedPost of postsToRemove) {
+                notifyTabsOfUpdate(removedPost.postNo, false);
+            }
+        }
+        return { success: true };
+    } catch (error) {
+        console.error('Error trimming records:', error);
+        return { success: false, error: error.message };
+    }
+}
+
 
 // 取得所有已儲存的貼文
 async function getAllPosts() {
@@ -99,7 +118,6 @@ async function deletePost(postId) {
         posts = posts.filter(p => p.id !== postId);
         await browser.storage.local.set({ savedPosts: posts });
 
-        // 通知分頁更新
         notifyTabsOfUpdate(postToDelete.postNo, false);
         console.log(`Post ${postId} deleted and all Komica tabs notified.`);
         return { success: true };
@@ -122,7 +140,7 @@ async function isPostSaved(postNo) {
     }
 }
 
-// **新增：一個共用的通知函式，用來更新所有 Komica 分頁的 UI**
+// 共用的通知函式，用來更新所有 Komica 分頁的 UI
 async function notifyTabsOfUpdate(postNo, isSaved) {
     try {
         const tabs = await browser.tabs.query({ url: "https://gita.komica1.org/*" });
