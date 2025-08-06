@@ -25,7 +25,7 @@ h1 {
 }
 
 #posts-container {
-    max-height: 420px; /* Adjusted height */
+    max-height: 400px; /* Adjusted height */
     overflow-y: auto;
 }
 
@@ -89,13 +89,15 @@ h1 {
 }
 
 .footer {
-    padding: 10px;
+    padding: 8px 12px;
     background-color: #f0f0f0;
     border-top: 1px solid #ccc;
-    text-align: center;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
 }
 
-.footer label {
+.setting-item label {
     display: inline-flex;
     align-items: center;
     cursor: pointer;
@@ -103,9 +105,16 @@ h1 {
     color: #333;
 }
 
-.footer input[type="checkbox"] {
+.setting-item input[type="checkbox"] {
     margin-right: 6px;
-    vertical-align: middle;
+}
+
+.setting-item input[type="number"] {
+    width: 50px;
+    margin-left: 8px;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+    padding: 2px 4px;
 }
 
 #empty-message {

@@ -13,10 +13,18 @@
         <div class="loader"></div>
     </div>
     <div class="footer">
-        <label for="open-in-new-tab-checkbox">
-            <input type="checkbox" id="open-in-new-tab-checkbox">
-            <span>在新分頁中開啟</span>
-        </label>
+        <div class="setting-item">
+            <label for="open-in-new-tab-checkbox">
+                <input type="checkbox" id="open-in-new-tab-checkbox">
+                <span>在新分頁中開啟</span>
+            </label>
+        </div>
+        <div class="setting-item">
+            <label for="max-records-input">
+                <span>最大記錄量:</span>
+                <input type="number" id="max-records-input" min="1" max="999">
+            </label>
+        </div>
     </div>
     <script src="popup.js"></script>
 </body>

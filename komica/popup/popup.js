@@ -3,7 +3,7 @@
  *
  * 功能：
  * 1. DOM 載入後，向 background.js 請求所有已儲存的貼文。
- * 2. 載入並套用使用者設定（如：是否在新分頁開啟）。
+ * 2. 載入並套用使用者設定（如：是否在新分頁開啟、最大記錄量）。
  * 3. 動態生成貼文列表並顯示在彈出視窗中。
  * 4. 為每個貼文項目添加點擊事件，並根據設定決定開啟方式。
  * 5. 為刪除按鈕添加點擊事件，以刪除該筆紀錄。
@@ -17,16 +17,31 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 const openInNewTabCheckbox = document.getElementById('open-in-new-tab-checkbox');
+const maxRecordsInput = document.getElementById('max-records-input');
 
-// 初始化設定：讀取儲存的偏好，並設定監聽器
+// 初始化設定
 async function initializeSettings() {
-    // 從儲存空間讀取設定，預設為 true (在新分頁開啟)
-    const result = await browser.storage.local.get({ openInNewTab: true });
-    openInNewTabCheckbox.checked = result.openInNewTab;
+    // 從儲存空間讀取設定
+    const settings = await browser.storage.local.get({
+        openInNewTab: true, // 預設在新分頁開啟
+        maxRecords: 50      // 預設最大記錄量為 50
+    });
     
-    // 監聽 checkbox 的變更事件，以儲存設定供下次開啟時使用
+    // 設定 checkbox
+    openInNewTabCheckbox.checked = settings.openInNewTab;
     openInNewTabCheckbox.addEventListener('change', () => {
         browser.storage.local.set({ openInNewTab: openInNewTabCheckbox.checked });
+    });
+
+    // 設定最大記錄量輸入框
+    maxRecordsInput.value = settings.maxRecords;
+    maxRecordsInput.addEventListener('change', () => {
+        let value = parseInt(maxRecordsInput.value, 10);
+        if (isNaN(value) || value < 1) {
+            value = 1; // 最小值為 1
+            maxRecordsInput.value = value;
+        }
+        browser.storage.local.set({ maxRecords: value });
     });
 }
 
@@ -71,7 +86,7 @@ function createPostElement(post) {
     const title = document.createElement('div');
     title.className = 'post-title';
     title.textContent = post.title;
-    title.title = post.title; // 滑鼠懸停時顯示完整標題
+    title.title = post.title;
 
     const preview = document.createElement('div');
     preview.className = 'post-preview';
@@ -88,12 +103,9 @@ function createPostElement(post) {
     // 點擊內容區域：跳轉到貼文
     content.addEventListener('click', async () => {
         const targetUrl = `${post.url}#r${post.postNo}`;
-        
-        // **修正：直接從 DOM 讀取 checkbox 的目前狀態，確保即時性**
         const shouldOpenInNewTab = openInNewTabCheckbox.checked;
 
         if (shouldOpenInNewTab) {
-            // --- 在新分頁開啟的邏輯 ---
             const existingTabs = await browser.tabs.query({ url: `${post.url.split('#')[0]}*` });
             if (existingTabs.length > 0) {
                 browser.tabs.update(existingTabs[0].id, { active: true, url: targetUrl });
@@ -105,13 +117,12 @@ function createPostElement(post) {
                 });
             }
         } else {
-            // --- 在目前分頁開啟的邏輯 ---
             const [currentTab] = await browser.tabs.query({ active: true, currentWindow: true });
             if (currentTab) {
                 browser.tabs.update(currentTab.id, { url: targetUrl });
             }
         }
-        window.close(); // 執行後關閉彈出視窗
+        window.close();
     });
 
     // 點擊刪除按鈕
