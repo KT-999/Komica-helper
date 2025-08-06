@@ -1,60 +1,53 @@
 /**
- * Komica Post Saver - Content Script
- * * 功能：
- * 1. 遍歷頁面上所有的貼文（.post）。
- * 2. 在每個貼文的標頭（.post-head）中插入一個「記憶此串」按鈕。
- * 3. 點擊按鈕時，收集貼文資訊並發送給 background.js 進行儲存。
- * 4. 使用 MutationObserver 來監聽動態載入的內容。
- * 5. **優化：監聽來自 background 的明確指令，直接更新 UI。**
+ * Komica Post Saver - Content Script (Cleaned Version)
+ *
+ * 功能：
+ * 1. 在頁面上所有貼文旁注入「記憶此串」按鈕。
+ * 2. 點擊按鈕時，收集貼文資訊 (包含最後回應編號) 並發送給背景。
+ * 3. 監聽來自背景的指令，以同步按鈕的 UI 狀態。
+ * 4. 在頁面載入時，主動檢查使用者是否正在閱讀已追蹤的串，並通知背景重設更新基準。
+ * 5. 使用 MutationObserver 處理動態載入的內容 (如展開回應)。
  */
 
-// **優化：監聽來自 background script 的 UI 更新指令**
-browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
+// --- 訊息監聽 ---
+
+browser.runtime.onMessage.addListener((message) => {
     if (message.action === 'updateButtonUI') {
         const { postNo, isSaved } = message;
         const postElement = document.querySelector(`.post[data-no="${postNo}"]`);
         if (postElement) {
             const saveButton = postElement.querySelector('.komica-saver-btn');
             if (saveButton) {
-                console.log(`[Komica Saver] 收到 UI 更新通知 No.${postNo}, isSaved: ${isSaved}`);
-                // 直接根據指令更新按鈕外觀，不再查詢
                 setButtonAppearance(saveButton, isSaved);
             }
         }
     }
-    return true; // 保持訊息通道開啟
+    return true;
 });
 
-// **新增：一個專門用來更新按鈕外觀的同步函式**
-function setButtonAppearance(button, isSaved) {
-    if (isSaved) {
-        button.textContent = '[已記憶]';
-        button.style.color = '#28a745';
-        button.style.fontWeight = 'bold';
-    } else {
-        button.textContent = '[記憶此串]';
-        button.style.color = '';
-        button.style.fontWeight = '';
-    }
+// --- 核心功能 ---
+
+// 主動檢查並重設更新基準
+async function proactiveUpdateReset() {
+    const { success, data: savedPosts } = await browser.runtime.sendMessage({ action: 'getAllPosts' });
+    if (!success || !savedPosts || savedPosts.length === 0) return;
+
+    const threadsOnPage = document.querySelectorAll('.thread');
+    threadsOnPage.forEach(threadElement => {
+        const threadNo = threadElement.dataset.no;
+        const savedPost = savedPosts.find(p => p.url.includes(`res=${threadNo}`));
+
+        if (savedPost && savedPost.hasUpdate) {
+            console.log(`[Komica Saver] 偵測到使用者正在閱讀已更新的串 No.${threadNo}，將重設更新狀態。`);
+            browser.runtime.sendMessage({ action: 'clearUpdateFlag', postId: savedPost.id });
+        }
+    });
 }
 
-// 檢查儲存狀態並更新按鈕樣式（用於頁面載入和動態新增元素）
-async function updateButtonState(button, postNo) {
-    const result = await browser.runtime.sendMessage({ action: 'isPostSaved', postNo: postNo });
-    if (result) {
-        setButtonAppearance(button, result.isSaved);
-    }
-}
-
-// 為指定的貼文元素添加「記憶」按鈕
+// 新增「記憶」按鈕到指定的貼文元素
 function addSaveButtonToPost(postElement) {
     const postNo = postElement.dataset.no;
-    if (!postNo) return; 
-
-    if (postElement.querySelector('.komica-saver-btn')) {
-        updateButtonState(postElement.querySelector('.komica-saver-btn'), postNo);
-        return;
-    }
+    if (!postNo || postElement.querySelector('.komica-saver-btn')) return;
 
     const saveButton = document.createElement('span');
     saveButton.className = 'komica-saver-btn text-button';
@@ -66,10 +59,8 @@ function addSaveButtonToPost(postElement) {
 
     saveButton.addEventListener('click', async () => {
         const threadElement = postElement.closest('.thread');
-        if (!threadElement) {
-            console.error("Komica Saver: Could not find parent thread for post:", postNo);
-            return; 
-        }
+        if (!threadElement) return;
+        
         const threadNo = threadElement.dataset.no;
         const pathParts = window.location.pathname.split('/');
         const boardPath = pathParts.length > 1 ? `/${pathParts[1]}/` : '/';
@@ -82,13 +73,21 @@ function addSaveButtonToPost(postElement) {
         let previewText = quoteElement ? quoteElement.innerText.trim().substring(0, 150) : '沒有內文';
         previewText = previewText.replace(/>>\d+/g, '').trim();
 
+        const replies = threadElement.querySelectorAll('.post.reply');
+        const lastReply = replies.length > 0 ? replies[replies.length - 1] : null;
+        const lastReplyNo = lastReply ? parseInt(lastReply.dataset.no, 10) : parseInt(threadNo, 10);
+
         const postData = {
             id: `post-${postNo}`,
             postNo: postNo,
             url: dedicatedThreadUrl,
             title: title,
             preview: previewText,
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
+            initialReplyNo: lastReplyNo,
+            lastCheckedReplyNo: lastReplyNo,
+            hasUpdate: false,
+            newReplyCount: 0
         };
 
         await browser.runtime.sendMessage({ action: 'toggleSavePost', data: postData });
@@ -111,36 +110,57 @@ function addSaveButtonToPost(postElement) {
     }
 }
 
-// 處理頁面上所有已存在的貼文
-function processAllPosts() {
-    const allPosts = document.querySelectorAll('.post');
-    allPosts.forEach(addSaveButtonToPost);
+// --- 輔助與初始化 ---
+
+// 根據儲存狀態設定按鈕外觀
+function setButtonAppearance(button, isSaved) {
+    if (isSaved) {
+        button.textContent = '[已記憶]';
+        button.style.color = '#28a745';
+        button.style.fontWeight = 'bold';
+    } else {
+        button.textContent = '[記憶此串]';
+        button.style.color = '';
+        button.style.fontWeight = '';
+    }
 }
 
-// 初始執行
-processAllPosts();
+// 向背景查詢狀態並更新按鈕
+async function updateButtonState(button, postNo) {
+    const result = await browser.runtime.sendMessage({ action: 'isPostSaved', postNo: postNo });
+    if (result) {
+        setButtonAppearance(button, result.isSaved);
+    }
+}
 
-// Komica 使用動態載入（例如展開串），需要監聽 DOM 變化
+// 處理頁面上所有已存在的貼文
+function processAllPosts() {
+    document.querySelectorAll('.post').forEach(addSaveButtonToPost);
+}
+
+// **修正：將 MutationObserver 還原為標準、穩定的寫法**
 const observer = new MutationObserver((mutations) => {
     for (const mutation of mutations) {
         if (mutation.addedNodes.length) {
             for (const node of mutation.addedNodes) {
-                if (node.nodeType === 1) {
+                if (node.nodeType === 1) { // 檢查是否為元素節點
+                    // 如果新增的節點本身就是一個 post
                     if (node.matches('.post')) {
                         addSaveButtonToPost(node);
                     }
-                    const newPosts = node.querySelectorAll('.post');
-                    if (newPosts.length > 0) {
-                        newPosts.forEach(addSaveButtonToPost);
-                    }
+                    // 或者新增的節點 *包含* post (例如展開回應時)
+                    node.querySelectorAll('.post').forEach(addSaveButtonToPost);
                 }
             }
         }
     }
 });
 
-// 監聽整個 form 的變化，這是 Komica 頁面的主要容器
 const mainForm = document.querySelector('form[name="delform"]');
 if (mainForm) {
     observer.observe(mainForm, { childList: true, subtree: true });
 }
+
+// --- 初始執行 ---
+processAllPosts();
+proactiveUpdateReset();
