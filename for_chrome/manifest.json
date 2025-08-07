@@ -1,0 +1,40 @@
+{
+  "manifest_version": 3,
+  "name": "Komica 貼文記憶器",
+  "version": "1.2.0",
+  "description": "在 gita.komica1.org 的貼文旁新增記憶、隱藏按鈕，並提供 NGID 過濾功能，方便您追蹤與管理討論串。",
+  "permissions": [
+    "storage",
+    "tabs",
+    "alarms"
+  ],
+  "host_permissions": [
+    "https://gita.komica1.org/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://gita.komica1.org/*/*"
+      ],
+      "js": [
+        "browser-polyfill.js",
+        "content_script.js"
+      ]
+    }
+  ],
+  "action": {
+    "default_icon": {
+      "48": "icons/icon-48.png",
+      "96": "icons/icon-96.png"
+    },
+    "default_title": "Komica 貼文記憶器",
+    "default_popup": "popup/popup.html"
+  },
+  "icons": {
+    "48": "icons/icon-48.png",
+    "96": "icons/icon-96.png"
+  }
+}

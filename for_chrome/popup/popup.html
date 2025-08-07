@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <title>Komica 貼文記憶器</title>
+    <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+    <div class="header">
+        <div class="tabs">
+            <button id="tab-saved" class="tab-btn active" data-target="saved-posts-container">已記憶</button>
+            <button id="tab-hidden" class="tab-btn" data-target="hidden-threads-container">已隱藏</button>
+            <button id="tab-ngid" class="tab-btn" data-target="ngid-container">NGID 管理</button>
+        </div>
+    </div>
+
+    <!-- 內容面板 -->
+    <div id="saved-posts-container" class="content-panel active"></div>
+    <div id="hidden-threads-container" class="content-panel"></div>
+    <div id="ngid-container" class="content-panel">
+        <div class="ngid-input-area">
+            <input type="text" id="ngid-input" placeholder="輸入要封鎖的 ID">
+            <button id="add-ngid-btn">新增</button>
+        </div>
+        <div id="ngid-list"></div>
+    </div>
+
+    <div class="footer">
+        <div class="setting-row">
+            <div class="setting-item">
+                <label><input type="checkbox" id="open-in-new-tab-checkbox"><span>在新分頁中開啟</span></label>
+            </div>
+            <div class="setting-item">
+                <label><span>最大記錄量:</span><input type="number" id="max-records-input" min="1" max="999"></label>
+            </div>
+        </div>
+        <div class="setting-row" id="auto-check-settings">
+             <div class="setting-item">
+                <label><input type="checkbox" id="auto-check-enabled"><span>啟用自動更新</span></label>
+            </div>
+             <div class="setting-item">
+                <label><span>檢查頻率(秒):</span><input type="number" id="check-interval-input" min="60"></label>
+            </div>
+        </div>
+    </div>
+    <script src="../browser-polyfill.js"></script>
+    <script src="popup.js"></script>
+</body>
+</html>
