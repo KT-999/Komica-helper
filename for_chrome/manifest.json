@@ -10,6 +10,15 @@
   ],
   "host_permissions": [
     "https://gita.komica1.org/*",
+    "https://gaia.komica1.org/*",
+    "https://atri.komica1.org/*",
+    "https://iris.komica1.org/*",
+    "https://sora.komica1.org/*",
+    "https://grea.komica1.org/*",
+    "https://2cat.komica1.org/*",
+    "https://tomo.komica1.org/*",
+    "https://luna.komica1.org/*",
+    "https://yuki.komica1.org/*",
     "https://komica1.org/*"
   ],
   "background": {
@@ -18,7 +27,16 @@
   "content_scripts": [
     {
       "matches": [
-        "https://gita.komica1.org/*/*"
+        "https://gita.komica1.org/*/*",
+        "https://gaia.komica1.org/*/*",
+        "https://atri.komica1.org/*/*",
+        "https://iris.komica1.org/*/*",
+        "https://sora.komica1.org/*/*",
+        "https://grea.komica1.org/*/*",
+        "https://2cat.komica1.org/*/*",
+        "https://tomo.komica1.org/*/*",
+        "https://luna.komica1.org/*/*",
+        "https://yuki.komica1.org/*/*"
       ],
       "js": [
         "browser-polyfill.js",
