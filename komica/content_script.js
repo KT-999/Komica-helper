@@ -3,10 +3,10 @@
  *
  * 功能：
  * 1. 注入「記憶此串」、「隱藏此串」、「NGID」按鈕。
- * 2. 實現 NGID 過濾邏輯，在頁面載入和動態更新時隱藏指定 ID 的貼文或串。
- * 3. 監聽背景指令，以同步 UI 狀態 (按鈕外觀、解除隱藏、解除 NGID 過濾)。
- * 4. 在頁面載入時，主動檢查使用者是否正在閱讀已追蹤的串，並重設更新基準。
- * 5. 使用 MutationObserver 處理動態載入的內容。
+ * 2. 實現 NGID 過濾邏輯。
+ * 3. 監聽背景指令以同步 UI 狀態。
+ * 4. 在頁面載入時，主動檢查並重設更新基準。
+ * 5. 新增：使用「點擊事件監聽」作為 failsafe，確保能處理 [展開] 等動態內容。
  */
 
 // --- 全域變數 ---
@@ -38,20 +38,17 @@ browser.runtime.onMessage.addListener((message) => {
 async function applyNgIdFilter() {
     const { success, data: ngIds } = await browser.runtime.sendMessage({ action: 'getNgIds' });
     if (!success) return;
-    currentNgIds = ngIds || []; // 更新全域的 NGID 列表
+    currentNgIds = ngIds || [];
 
-    // 更新所有 NG 按鈕的狀態
     document.querySelectorAll('.komica-ngid-btn').forEach(btn => {
         updateNgIdButtonState(btn, btn.dataset.ngid);
     });
 
-    // 執行過濾
     document.querySelectorAll('.post').forEach(postElement => {
         const idElement = postElement.querySelector('.id');
         if (idElement) {
             const currentId = idElement.dataset.id;
             const shouldHide = currentNgIds.includes(currentId);
-
             let targetElement = postElement.classList.contains('threadpost') ? postElement.closest('.thread') : postElement;
             if (!targetElement) targetElement = postElement;
 
@@ -59,7 +56,6 @@ async function applyNgIdFilter() {
                 targetElement.style.display = 'none';
                 targetElement.dataset.hiddenByNgid = currentId;
             } else if (targetElement.dataset.hiddenByNgid === currentId) {
-                // 如果這個元素是因為這個 ID 被隱藏的，但現在 ID 不在 NG 列表裡了，就解除隱藏
                 targetElement.style.display = '';
                 delete targetElement.dataset.hiddenByNgid;
             }
@@ -69,12 +65,11 @@ async function applyNgIdFilter() {
 
 // 解除由特定 NGID 隱藏的內容
 function unhidePostsByNgId(ngId) {
-    currentNgIds = currentNgIds.filter(id => id !== ngId); // 從全域列表中移除
+    currentNgIds = currentNgIds.filter(id => id !== ngId);
     document.querySelectorAll(`[data-hidden-by-ngid="${ngId}"]`).forEach(element => {
         element.style.display = '';
         delete element.dataset.hiddenByNgid;
     });
-    // 更新相關 NG 按鈕的狀態
     document.querySelectorAll(`.komica-ngid-btn[data-ngid="${ngId}"]`).forEach(btn => {
         updateNgIdButtonState(btn, ngId);
     });
@@ -184,13 +179,13 @@ function addHideButtonToThread(threadElement) {
 // 新增「NGID」按鈕
 function addNgIdButtonToPost(postElement) {
     const idElement = postElement.querySelector('.id[data-id]');
-    if (!idElement || idElement.querySelector('.komica-ngid-btn')) return;
+    if (!idElement || (idElement.nextElementSibling && idElement.nextElementSibling.classList.contains('komica-ngid-btn'))) return;
 
     const ngId = idElement.dataset.id;
     const ngButton = document.createElement('span');
     ngButton.className = 'komica-ngid-btn text-button';
     ngButton.dataset.ngid = ngId;
-    ngButton.style.marginLeft = '3px';
+    ngButton.style.marginLeft = '5px';
     ngButton.style.cursor = 'pointer';
     ngButton.style.fontWeight = 'bold';
     
@@ -205,9 +200,8 @@ function addNgIdButtonToPost(postElement) {
         }
     });
 
-    idElement.appendChild(ngButton);
+    idElement.after(ngButton);
 }
-
 
 // --- 輔助與初始化 ---
 
@@ -234,7 +228,7 @@ function updateSaveButtonAppearance(postNo, isSaved) {
 
 async function updateSaveButtonState(button, postNo) {
     const result = await browser.runtime.sendMessage({ action: 'isPostSaved', postNo: postNo });
-    if (result) {
+    if (result && result.success) {
         updateSaveButtonAppearance(postNo, result.isSaved);
     }
 }
@@ -246,36 +240,48 @@ function updateNgIdButtonState(button, ngId) {
     button.title = isNg ? `點擊以將 ID:${ngId} 從 NG 列表中移除` : `點擊以將 ID:${ngId} 加入 NG 列表`;
 }
 
-function processPageContent() {
+// 一個統一的函式，用來處理頁面上所有需要附加功能的元素
+function processElements() {
     document.querySelectorAll('.post').forEach(post => {
         addSaveButtonToPost(post);
         addNgIdButtonToPost(post);
     });
     document.querySelectorAll('.thread').forEach(addHideButtonToThread);
-    applyNgIdFilter();
 }
 
 // --- 初始執行與監聽 ---
-const observer = new MutationObserver((mutations) => {
-    for (const mutation of mutations) {
-        if (mutation.addedNodes.length > 0) {
-            processPageContent();
-            break;
-        }
-    }
-});
 
-const mainForm = document.querySelector('form[name="delform"]');
-if (mainForm) {
-    observer.observe(mainForm, { childList: true, subtree: true });
+// **新增：設定點擊事件監聽器作為 failsafe**
+function setupClickListeners() {
+    // 使用事件委派，將監聽器綁定在一個穩定的父元素上
+    document.body.addEventListener('click', (event) => {
+        // 檢查被點擊的元素是否是 [展開] 按鈕
+        if (event.target.matches('.-expand-thread')) {
+            console.log('[Komica Saver] 偵測到 [展開] 按鈕點擊，將在 750ms 後強制重新處理頁面。');
+            // 等待一小段時間，讓網站的 AJAX 有時間完成並插入新內容
+            setTimeout(() => {
+                console.log('[Komica Saver] 執行點擊後的延遲處理...');
+                processElements();
+                applyNgIdFilter();
+            }, 750); // 延遲 750 毫秒以確保內容已載入
+        }
+    });
+    console.log('[Komica Saver] [展開] 按鈕的點擊監聽器已設定。');
 }
 
 // 首次載入頁面時，執行所有初始化函式
 async function initialize() {
-    await applyNgIdFilter(); // 先取得 NGID 列表，再處理頁面
-    processPageContent();
+    console.log('[Komica Saver] 腳本初始化開始...');
+    await applyNgIdFilter();
+    console.log('[Komica Saver] 步驟 1/5: NGID 過濾已應用。');
+    processElements();
+    console.log('[Komica Saver] 步驟 2/5: 靜態內容已處理。');
     proactiveUpdateReset();
+    console.log('[Komica Saver] 步驟 3/5: 已記憶串的更新狀態已檢查。');
     hideStoredThreads();
+    console.log('[Komica Saver] 步驟 4/5: 已隱藏串已處理。');
+    setupClickListeners();
+    console.log('[Komica Saver] 步驟 5/5: 點擊監聽器已設定。初始化完成。');
 }
 
 initialize();
