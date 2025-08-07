@@ -16,29 +16,30 @@ try {
 const ALARM_NAME = 'komica-check-alarm';
 
 // --- 初始化與啟動 ---
-browser.runtime.onInstalled.addListener(() => {
-    browser.storage.local.get(null, (data) => {
-        const defaults = {
-            savedPosts: [],
-            hiddenThreads: [],
-            ngIds: [],
-            maxRecords: 50,
-            autoCheckEnabled: false,
-            checkInterval: 300
-        };
-        const toSet = {};
-        for (const key in defaults) {
-            if (data[key] === undefined) {
-                toSet[key] = defaults[key];
-            }
+browser.runtime.onInstalled.addListener(async () => {
+    // 使用 await 等待 Promise 解析，這是更現代的寫法
+    const data = await browser.storage.local.get(null);
+
+    const defaults = {
+        savedPosts: [],
+        hiddenThreads: [],
+        ngIds: [],
+        maxRecords: 50,
+        autoCheckEnabled: false,
+        checkInterval: 300
+    };
+    const toSet = {};
+    for (const key in defaults) {
+        if (data[key] === undefined) {
+            toSet[key] = defaults[key];
         }
-        if (Object.keys(toSet).length > 0) {
-            browser.storage.local.set(toSet);
-        }
-        if (data.autoCheckEnabled) {
-            updateAlarm();
-        }
-    });
+    }
+    if (Object.keys(toSet).length > 0) {
+        await browser.storage.local.set(toSet);
+    }
+    if (data.autoCheckEnabled) {
+        updateAlarm();
+    }
 });
 
 browser.runtime.onStartup.addListener(updateAlarm);
