@@ -5,7 +5,8 @@
  * 1. 管理「已記憶」、「已隱藏」、「NGID」三份列表。
  * 2. 管理偵測更新的 alarm。
  * 3. 精準計算所有已更新串的新回應「總數」，並顯示在圖示徽章上。
- * 4. 處理所有與 content script 和 popup 之間的通訊。
+ * 4. 新增：記錄第一則新回應的編號，以供跳轉。
+ * 5. 處理所有與 content script 和 popup 之間的通訊。
  */
 
 const ALARM_NAME = 'komica-check-alarm';
@@ -14,25 +15,15 @@ const ALARM_NAME = 'komica-check-alarm';
 browser.runtime.onInstalled.addListener(() => {
     browser.storage.local.get(null, (data) => {
         const defaults = {
-            savedPosts: [],
-            hiddenThreads: [],
-            ngIds: [],
-            maxRecords: 50,
-            autoCheckEnabled: false,
-            checkInterval: 300
+            savedPosts: [], hiddenThreads: [], ngIds: [],
+            maxRecords: 50, autoCheckEnabled: false, checkInterval: 300
         };
         const toSet = {};
         for (const key in defaults) {
-            if (data[key] === undefined) {
-                toSet[key] = defaults[key];
-            }
+            if (data[key] === undefined) toSet[key] = defaults[key];
         }
-        if (Object.keys(toSet).length > 0) {
-            browser.storage.local.set(toSet);
-        }
-        if (data.autoCheckEnabled) {
-            updateAlarm();
-        }
+        if (Object.keys(toSet).length > 0) browser.storage.local.set(toSet);
+        if (data.autoCheckEnabled) updateAlarm();
     });
 });
 
@@ -79,6 +70,12 @@ browser.alarms.onAlarm.addListener(async (alarm) => {
                 const newLastReplyNo = parseInt(lastPostOnPage.dataset.no, 10);
                 if (newLastReplyNo > post.lastCheckedReplyNo) {
                     const newRepliesSinceLastView = allReplies.filter(r => parseInt(r.dataset.no, 10) > post.initialReplyNo);
+                    
+                    // **新增：如果這是第一次偵測到更新，記錄下第一則新回應的編號**
+                    if (newRepliesSinceLastView.length > 0 && !post.hasUpdate) {
+                        post.firstNewReplyNo = parseInt(newRepliesSinceLastView[0].dataset.no, 10);
+                    }
+
                     post.lastCheckedReplyNo = newLastReplyNo;
                     post.newReplyCount = newRepliesSinceLastView.length;
                     post.hasUpdate = true;
@@ -148,6 +145,7 @@ async function clearUpdateFlag(postId) {
         post.hasUpdate = false;
         post.newReplyCount = 0;
         post.initialReplyNo = post.lastCheckedReplyNo;
+        post.firstNewReplyNo = null; // **新增：清除第一則新回應的編號**
         await browser.storage.local.set({ savedPosts });
         await updateBadge();
     }
@@ -241,7 +239,7 @@ async function notifyTabsOfUpdate(postNo, isSaved) {
 }
 
 async function notifyAllTabs(message) {
-    const tabs = await browser.tabs.query({ url: "https://gita.komica1.org/*" });
+    const tabs = await browser.tabs.query({ url: "*://*.komica1.org/*" });
     for (const tab of tabs) {
         browser.tabs.sendMessage(tab.id, message).catch(e => {});
     }

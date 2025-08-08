@@ -132,7 +132,8 @@ function addSaveButtonToPost(postElement) {
         const postData = {
             id: `post-${postNo}`, postNo, url: dedicatedThreadUrl, title, preview: previewText,
             timestamp: new Date().toISOString(), initialReplyNo: lastReplyNo,
-            lastCheckedReplyNo: lastReplyNo, hasUpdate: false, newReplyCount: 0
+            lastCheckedReplyNo: lastReplyNo, hasUpdate: false, newReplyCount: 0,
+            firstNewReplyNo: null // **新增：初始化第一則新回應的編號**
         };
         await browser.runtime.sendMessage({ action: 'toggleSavePost', data: postData });
         await updateSaveButtonState(saveButton, postNo);
@@ -251,37 +252,23 @@ function processElements() {
 
 // --- 初始執行與監聽 ---
 
-// **新增：設定點擊事件監聽器作為 failsafe**
 function setupClickListeners() {
-    // 使用事件委派，將監聽器綁定在一個穩定的父元素上
     document.body.addEventListener('click', (event) => {
-        // 檢查被點擊的元素是否是 [展開] 按鈕
         if (event.target.matches('.-expand-thread')) {
-            console.log('[Komica Saver] 偵測到 [展開] 按鈕點擊，將在 750ms 後強制重新處理頁面。');
-            // 等待一小段時間，讓網站的 AJAX 有時間完成並插入新內容
             setTimeout(() => {
-                console.log('[Komica Saver] 執行點擊後的延遲處理...');
                 processElements();
                 applyNgIdFilter();
-            }, 750); // 延遲 750 毫秒以確保內容已載入
+            }, 750);
         }
     });
-    console.log('[Komica Saver] [展開] 按鈕的點擊監聽器已設定。');
 }
 
-// 首次載入頁面時，執行所有初始化函式
 async function initialize() {
-    console.log('[Komica Saver] 腳本初始化開始...');
     await applyNgIdFilter();
-    console.log('[Komica Saver] 步驟 1/5: NGID 過濾已應用。');
     processElements();
-    console.log('[Komica Saver] 步驟 2/5: 靜態內容已處理。');
     proactiveUpdateReset();
-    console.log('[Komica Saver] 步驟 3/5: 已記憶串的更新狀態已檢查。');
     hideStoredThreads();
-    console.log('[Komica Saver] 步驟 4/5: 已隱藏串已處理。');
     setupClickListeners();
-    console.log('[Komica Saver] 步驟 5/5: 點擊監聽器已設定。初始化完成。');
 }
 
 initialize();
