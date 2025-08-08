@@ -4,7 +4,8 @@
  * 功能：
  * 1. 管理「已記憶」、「已隱藏」、「NGID」三份列表。
  * 2. 管理偵測更新的 alarm。
- * 3. 處理所有與 content script 和 popup 之間的通訊。
+ * 3. 精準計算所有已更新串的新回應「總數」，並顯示在圖示徽章上。
+ * 4. 處理所有與 content script 和 popup 之間的通訊。
  */
 
 const ALARM_NAME = 'komica-check-alarm';
@@ -87,8 +88,7 @@ browser.alarms.onAlarm.addListener(async (alarm) => {
         }
         if (hasChanges) {
             await browser.storage.local.set({ savedPosts });
-            browser.action.setBadgeText({ text: '!' });
-            browser.action.setBadgeBackgroundColor({ color: '#d9534f' });
+            await updateBadge();
         }
     }
 });
@@ -111,6 +111,7 @@ async function toggleSavePost(postData) {
         }
     }
     await browser.storage.local.set({ savedPosts });
+    await updateBadge();
     return { success: true };
 }
 
@@ -123,6 +124,7 @@ async function trimRecords() {
         for (const removedPost of postsToRemove) {
             notifyTabsOfUpdate(removedPost.postNo, false);
         }
+        await updateBadge();
     }
     return { success: true };
 }
@@ -134,6 +136,7 @@ async function deletePost(postId) {
         savedPosts = savedPosts.filter(p => p.id !== postId);
         await browser.storage.local.set({ savedPosts });
         notifyTabsOfUpdate(postToDelete.postNo, false);
+        await updateBadge();
     }
     return { success: true };
 }
@@ -146,10 +149,7 @@ async function clearUpdateFlag(postId) {
         post.newReplyCount = 0;
         post.initialReplyNo = post.lastCheckedReplyNo;
         await browser.storage.local.set({ savedPosts });
-        const remainingUpdates = savedPosts.some(p => p.hasUpdate);
-        if (!remainingUpdates) {
-            browser.action.setBadgeText({ text: '' });
-        }
+        await updateBadge();
     }
     return { success: true };
 }
@@ -191,6 +191,20 @@ async function removeNgId(ngId) {
 }
 
 // --- 輔助函式 ---
+
+async function updateBadge() {
+    const { savedPosts } = await browser.storage.local.get({ savedPosts: [] });
+    const totalNewReplies = savedPosts
+        .filter(p => p.hasUpdate && p.newReplyCount > 0)
+        .reduce((sum, p) => sum + p.newReplyCount, 0);
+
+    if (totalNewReplies > 0) {
+        browser.action.setBadgeText({ text: totalNewReplies.toString() });
+        browser.action.setBadgeBackgroundColor({ color: '#d9534f' });
+    } else {
+        browser.action.setBadgeText({ text: '' });
+    }
+}
 
 async function updateAlarm() {
     const { autoCheckEnabled, checkInterval } = await browser.storage.local.get({ autoCheckEnabled: false, checkInterval: 300 });

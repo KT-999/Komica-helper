@@ -9,7 +9,6 @@
  */
 
 document.addEventListener('DOMContentLoaded', () => {
-    browser.action.setBadgeText({ text: '' });
     setupTabs();
     initializeSettings();
     loadSavedPosts();
