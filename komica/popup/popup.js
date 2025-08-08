@@ -6,7 +6,7 @@
  * 2. 載入並顯示對應列表的內容，並加入錯誤處理。
  * 3. 管理所有設定選項。
  * 4. 處理新增和刪除 NGID 的互動。
- * 5. 新增：點擊已更新的串時，會重整分頁並跳轉到第一則新回應。
+ * 5. 修正：點擊已更新的串時，會「強制重整」分頁並跳轉到第一則新回應。
  */
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -100,14 +100,13 @@ function createSavedPostElement(post) {
     content.className = 'post-content';
     content.innerHTML = `<div class="post-title" title="${post.title}">${post.title}</div><div class="post-preview">${post.preview}</div>`;
     
-    // **修正：點擊事件的完整邏輯**
     content.addEventListener('click', async () => {
         // 決定目標網址
         let targetUrl;
         if (post.hasUpdate && post.firstNewReplyNo) {
             targetUrl = `${post.url.split('#')[0]}#r${post.firstNewReplyNo}`;
         } else {
-            targetUrl = `${post.url}#r${post.postNo}`;
+            targetUrl = `${post.url.split('#')[0]}#r${post.postNo}`;
         }
 
         // 無論如何，都先清除更新旗標
@@ -120,17 +119,25 @@ function createSavedPostElement(post) {
         if (shouldOpenInNewTab) {
             const existingTabs = await browser.tabs.query({ url: `${post.url.split('#')[0]}*` });
             if (existingTabs.length > 0) {
-                // 如果分頁已存在，則使用新網址更新它（這會觸發重整和跳轉）
-                browser.tabs.update(existingTabs[0].id, { active: true, url: targetUrl });
+                // **修正：使用 cache-busting 參數強制重整頁面**
+                const reloadUrl = new URL(targetUrl);
+                reloadUrl.searchParams.set('ks_reload', Date.now());
+                const finalUrl = reloadUrl.href;
+
+                browser.tabs.update(existingTabs[0].id, { active: true, url: finalUrl });
             } else {
                 // 如果不存在，則在目前分頁旁建立新分頁
                 const [currentTab] = await browser.tabs.query({ active: true, currentWindow: true });
                 browser.tabs.create({ url: targetUrl, index: currentTab.index + 1 });
             }
         } else {
-            // 在目前分頁開啟
+            // 在目前分頁開啟，同樣需要強制重整
+            const reloadUrl = new URL(targetUrl);
+            reloadUrl.searchParams.set('ks_reload', Date.now());
+            const finalUrl = reloadUrl.href;
+            
             const [currentTab] = await browser.tabs.query({ active: true, currentWindow: true });
-            if (currentTab) browser.tabs.update(currentTab.id, { url: targetUrl });
+            if (currentTab) browser.tabs.update(currentTab.id, { url: finalUrl });
         }
         window.close();
     });
