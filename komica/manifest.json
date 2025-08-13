@@ -5,7 +5,8 @@
   "description": "在支援的 Komica 網站上新增記憶、隱藏按鈕，並提供 NGID 過濾功能，方便您追蹤與管理討論串。",
   "icons": {
     "48": "icons/icon-48.png",
-    "96": "icons/icon-96.png"
+    "96": "icons/icon-96.png",
+    "128": "icons/icon-128.png"
   },
   "permissions": [
     "storage",
@@ -41,7 +42,8 @@
   "action": {
     "default_icon": {
       "48": "icons/icon-48.png",
-      "96": "icons/icon-96.png"
+      "96": "icons/icon-96.png",
+      "128": "icons/icon-128.png"
     },
     "default_title": "Komica 貼文記憶器",
     "default_popup": "popup/popup.html"
