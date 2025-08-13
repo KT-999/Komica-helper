@@ -7,6 +7,7 @@
  * 3. 管理所有設定選項。
  * 4. 處理新增和刪除 NGID 的互動。
  * 5. 修正：點擊已更新的串時，會「強制重整」分頁並跳轉到第一則新回應。
+ * 6. 安全性修正：避免使用 innerHTML 來插入動態內容。
  */
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -96,9 +97,22 @@ function createSavedPostElement(post) {
         indicator.title = `新增 ${post.newReplyCount} 則回應`;
         item.appendChild(indicator);
     }
+    
+    // **安全性修正：取代 innerHTML**
     const content = document.createElement('div');
     content.className = 'post-content';
-    content.innerHTML = `<div class="post-title" title="${post.title}">${post.title}</div><div class="post-preview">${post.preview}</div>`;
+    
+    const titleDiv = document.createElement('div');
+    titleDiv.className = 'post-title';
+    titleDiv.title = post.title;
+    titleDiv.textContent = post.title; // 使用 textContent
+
+    const previewDiv = document.createElement('div');
+    previewDiv.className = 'post-preview';
+    previewDiv.textContent = post.preview; // 使用 textContent
+
+    content.appendChild(titleDiv);
+    content.appendChild(previewDiv);
     
     content.addEventListener('click', async () => {
         // 決定目標網址
@@ -119,19 +133,16 @@ function createSavedPostElement(post) {
         if (shouldOpenInNewTab) {
             const existingTabs = await browser.tabs.query({ url: `${post.url.split('#')[0]}*` });
             if (existingTabs.length > 0) {
-                // **修正：使用 cache-busting 參數強制重整頁面**
                 const reloadUrl = new URL(targetUrl);
                 reloadUrl.searchParams.set('ks_reload', Date.now());
                 const finalUrl = reloadUrl.href;
 
                 browser.tabs.update(existingTabs[0].id, { active: true, url: finalUrl });
             } else {
-                // 如果不存在，則在目前分頁旁建立新分頁
                 const [currentTab] = await browser.tabs.query({ active: true, currentWindow: true });
                 browser.tabs.create({ url: targetUrl, index: currentTab.index + 1 });
             }
         } else {
-            // 在目前分頁開啟，同樣需要強制重整
             const reloadUrl = new URL(targetUrl);
             reloadUrl.searchParams.set('ks_reload', Date.now());
             const finalUrl = reloadUrl.href;
@@ -183,7 +194,13 @@ function createHiddenThreadElement(threadNo) {
 function createNgIdElement(ngId) {
     const item = document.createElement('div');
     item.className = 'ngid-item';
-    item.innerHTML = `<span class="ngid-text">${ngId}</span>`;
+    
+    // **安全性修正：取代 innerHTML**
+    const ngIdSpan = document.createElement('span');
+    ngIdSpan.className = 'ngid-text';
+    ngIdSpan.textContent = ngId; // 使用 textContent
+    item.appendChild(ngIdSpan);
+
     const removeBtn = document.createElement('button');
     removeBtn.className = 'action-btn delete-btn';
     removeBtn.textContent = '移除';
