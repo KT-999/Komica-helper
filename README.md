@@ -1,3 +1,6 @@
+https://addons.mozilla.org/zh-TW/firefox/addon/komica-%E8%B2%BC%E6%96%87%E8%A8%98%E6%86%B6%E5%99%A8/
+
+
 請釘選至工具列
 
 chrome版本請直接放入取代komica資料夾內的檔案
