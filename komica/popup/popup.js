@@ -1,5 +1,5 @@
 /**
- * Komica Post Saver - Popup Script (Complete & Final Version)
+ * Komica Post Saver - Popup Script (改良版)
  *
  * 功能：
  * 1. 實現分頁切換 (已記憶 / 已隱藏 / NGID)。
@@ -8,6 +8,7 @@
  * 4. 處理新增和刪除 NGID 的互動。
  * 5. 修正：點擊已更新的串時，會「強制重整」分頁並跳轉到第一則新回應。
  * 6. 安全性修正：避免使用 innerHTML 來插入動態內容。
+ * 7. 新增：加入手動重載頁面功能的按鈕邏輯。
  */
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -15,6 +16,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initializeSettings();
     loadSavedPosts();
     setupNgIdTab();
+    setupReapplyButton(); // 新增：初始化手動重載按鈕
 });
 
 // --- 分頁管理 ---
@@ -98,24 +100,22 @@ function createSavedPostElement(post) {
         item.appendChild(indicator);
     }
     
-    // **安全性修正：取代 innerHTML**
     const content = document.createElement('div');
     content.className = 'post-content';
     
     const titleDiv = document.createElement('div');
     titleDiv.className = 'post-title';
     titleDiv.title = post.title;
-    titleDiv.textContent = post.title; // 使用 textContent
+    titleDiv.textContent = post.title;
 
     const previewDiv = document.createElement('div');
     previewDiv.className = 'post-preview';
-    previewDiv.textContent = post.preview; // 使用 textContent
+    previewDiv.textContent = post.preview;
 
     content.appendChild(titleDiv);
     content.appendChild(previewDiv);
     
     content.addEventListener('click', async () => {
-        // 決定目標網址
         let targetUrl;
         if (post.hasUpdate && post.firstNewReplyNo) {
             targetUrl = `${post.url.split('#')[0]}#r${post.firstNewReplyNo}`;
@@ -123,7 +123,6 @@ function createSavedPostElement(post) {
             targetUrl = `${post.url.split('#')[0]}#r${post.postNo}`;
         }
 
-        // 無論如何，都先清除更新旗標
         if (post.hasUpdate) {
             await browser.runtime.sendMessage({ action: 'clearUpdateFlag', postId: post.id });
         }
@@ -195,10 +194,9 @@ function createNgIdElement(ngId) {
     const item = document.createElement('div');
     item.className = 'ngid-item';
     
-    // **安全性修正：取代 innerHTML**
     const ngIdSpan = document.createElement('span');
     ngIdSpan.className = 'ngid-text';
-    ngIdSpan.textContent = ngId; // 使用 textContent
+    ngIdSpan.textContent = ngId;
     item.appendChild(ngIdSpan);
 
     const removeBtn = document.createElement('button');
@@ -231,6 +229,34 @@ function setupNgIdTab() {
     addButton.addEventListener('click', addId);
     input.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') addId();
+    });
+}
+
+// 新增：設定手動重載按鈕的功能
+function setupReapplyButton() {
+    const btn = document.getElementById('reapply-ng-btn');
+    if (!btn) return;
+
+    btn.addEventListener('click', async () => {
+        // 尋找當前視窗中活躍的 Komica 分頁
+        const tabs = await browser.tabs.query({ 
+            active: true, 
+            currentWindow: true,
+            url: "*://*.komica1.org/*" 
+        });
+
+        if (tabs.length > 0) {
+            const targetTab = tabs[0];
+            // 發送訊息到 content_script
+            browser.tabs.sendMessage(targetTab.id, { action: 'reapplyFunctions' });
+            
+            btn.textContent = '指令已傳送！';
+            btn.disabled = true;
+            setTimeout(() => window.close(), 500); // 延遲半秒後關閉 popup
+        } else {
+            btn.textContent = '找不到 Komica 分頁';
+            btn.disabled = true;
+        }
     });
 }
 

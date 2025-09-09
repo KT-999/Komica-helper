@@ -1,12 +1,13 @@
 /**
- * Komica Post Saver - Content Script (Complete & Final Version with inline NGID)
+ * Komica Post Saver - Content Script (改良版)
  *
  * 功能：
  * 1. 注入「記憶此串」、「隱藏此串」、「NGID」按鈕。
  * 2. 實現 NGID 過濾邏輯。
  * 3. 監聽背景指令以同步 UI 狀態。
  * 4. 在頁面載入時，主動檢查並重設更新基準。
- * 5. 新增：使用「點擊事件監聽」作為 failsafe，確保能處理 [展開] 等動態內容。
+ * 5. 改良：使用 `MutationObserver` 替代 `setTimeout`，可靠地處理動態載入的內容。
+ * 6. 新增：接收來自 Popup 的手動重載指令。
  */
 
 // --- 全域變數 ---
@@ -27,6 +28,12 @@ browser.runtime.onMessage.addListener((message) => {
             break;
         case 'unhidePostsByNgId':
             unhidePostsByNgId(message.ngId);
+            break;
+        // 新增：處理來自 popup 的重載指令
+        case 'reapplyFunctions':
+            console.log('收到重載指令，重新處理頁面元素...');
+            processElements();
+            applyNgIdFilter();
             break;
     }
     return true;
@@ -133,7 +140,7 @@ function addSaveButtonToPost(postElement) {
             id: `post-${postNo}`, postNo, url: dedicatedThreadUrl, title, preview: previewText,
             timestamp: new Date().toISOString(), initialReplyNo: lastReplyNo,
             lastCheckedReplyNo: lastReplyNo, hasUpdate: false, newReplyCount: 0,
-            firstNewReplyNo: null // **新增：初始化第一則新回應的編號**
+            firstNewReplyNo: null
         };
         await browser.runtime.sendMessage({ action: 'toggleSavePost', data: postData });
         await updateSaveButtonState(saveButton, postNo);
@@ -250,17 +257,35 @@ function processElements() {
     document.querySelectorAll('.thread').forEach(addHideButtonToThread);
 }
 
-// --- 初始執行與監聽 ---
+// --- 初始執行與監聽 (改良版) ---
 
-function setupClickListeners() {
-    document.body.addEventListener('click', (event) => {
-        if (event.target.matches('.-expand-thread')) {
-            setTimeout(() => {
-                processElements();
-                applyNgIdFilter();
-            }, 750);
+// 設定 MutationObserver 來監視 DOM 變化
+function setupObserver() {
+    const callback = (mutationsList, observer) => {
+        for (const mutation of mutationsList) {
+            if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
+                mutation.addedNodes.forEach(node => {
+                    if (node.nodeType === Node.ELEMENT_NODE) {
+                        if (node.matches('.post')) {
+                            addSaveButtonToPost(node);
+                            addNgIdButtonToPost(node);
+                        }
+                        if (node.matches('.thread')) {
+                            addHideButtonToThread(node);
+                        }
+                        node.querySelectorAll('.post').forEach(post => {
+                            addSaveButtonToPost(post);
+                            addNgIdButtonToPost(post);
+                        });
+                        node.querySelectorAll('.thread').forEach(addHideButtonToThread);
+                    }
+                });
+            }
         }
-    });
+    };
+
+    const observer = new MutationObserver(callback);
+    observer.observe(document.body, { childList: true, subtree: true });
 }
 
 async function initialize() {
@@ -268,7 +293,7 @@ async function initialize() {
     processElements();
     proactiveUpdateReset();
     hideStoredThreads();
-    setupClickListeners();
+    setupObserver(); // 使用新的 observer
 }
 
 initialize();
