@@ -1,33 +1,16 @@
 /**
- * Komica Post Saver - Popup Script (v1.5.0 Stable)
+ * Komica Post Saver - Popup Script (v1.6.0 Fix)
  *
  * 變更：
- * 1. 引入 sendMessageWithRetry 邏輯，增強與背景腳本通訊的穩定性。
- * 2. 新增手動重載按鈕。
+ * 1. 新增自動清理相關設定的 UI 邏輯。
+ * 2. 確保所有 DOM 元素和事件監聽都正確初始化。
  */
-
-// --- 核心通訊函式 ---
-async function sendMessageWithRetry(message, retries = 3, delay = 100) {
-    for (let i = 0; i < retries; i++) {
-        try {
-            const response = await browser.runtime.sendMessage(message);
-            if (typeof response !== 'undefined') return response;
-        } catch (e) {
-            if (i === retries - 1) {
-                console.error(`Popup: 訊息傳送失敗`, message, e);
-                return { success: false, error: e.message };
-            }
-            await new Promise(resolve => setTimeout(resolve, delay));
-        }
-    }
-}
 
 document.addEventListener('DOMContentLoaded', () => {
     setupTabs();
     initializeSettings();
     loadSavedPosts();
     setupNgIdTab();
-    setupReapplyButton();
 });
 
 // --- 分頁管理 ---
@@ -53,12 +36,11 @@ function setupTabs() {
 }
 
 // --- 載入內容 ---
-
 async function loadSavedPosts() {
     const container = document.getElementById('saved-posts-container');
     container.innerHTML = '<div class="loader">讀取中...</div>';
     try {
-        const response = await sendMessageWithRetry({ action: 'getAllPosts' });
+        const response = await browser.runtime.sendMessage({ action: 'getAllPosts' });
         container.innerHTML = '';
         if (response && response.success && response.data.length > 0) {
             response.data.forEach(post => container.appendChild(createSavedPostElement(post)));
@@ -74,7 +56,7 @@ async function loadHiddenThreads() {
     const container = document.getElementById('hidden-threads-container');
     container.innerHTML = '<div class="loader">讀取中...</div>';
     try {
-        const response = await sendMessageWithRetry({ action: 'getHiddenThreads' });
+        const response = await browser.runtime.sendMessage({ action: 'getHiddenThreads' });
         container.innerHTML = '';
         if (response && response.success && response.data.length > 0) {
             response.data.forEach(threadNo => container.appendChild(createHiddenThreadElement(threadNo)));
@@ -89,7 +71,7 @@ async function loadHiddenThreads() {
 async function loadNgIds() {
     const container = document.getElementById('ngid-list');
     container.innerHTML = '<div class="loader">讀取中...</div>';
-    const response = await sendMessageWithRetry({ action: 'getNgIds' });
+    const response = await browser.runtime.sendMessage({ action: 'getNgIds' });
     container.innerHTML = '';
     if (response && response.success && response.data.length > 0) {
         response.data.forEach(ngId => container.appendChild(createNgIdElement(ngId)));
@@ -99,7 +81,6 @@ async function loadNgIds() {
 }
 
 // --- 建立 DOM 元素 ---
-
 function createSavedPostElement(post) {
     const item = document.createElement('div');
     item.className = 'post-item';
@@ -127,27 +108,22 @@ function createSavedPostElement(post) {
     content.appendChild(previewDiv);
 
     content.addEventListener('click', async () => {
-        let targetUrl;
+        let targetUrl = `${post.url.split('#')[0]}#r${post.postNo}`;
         if (post.hasUpdate && post.firstNewReplyNo) {
             targetUrl = `${post.url.split('#')[0]}#r${post.firstNewReplyNo}`;
-        } else {
-            targetUrl = `${post.url.split('#')[0]}#r${post.postNo}`;
         }
 
         if (post.hasUpdate) {
-            await sendMessageWithRetry({ action: 'clearUpdateFlag', postId: post.id });
+            await browser.runtime.sendMessage({ action: 'clearUpdateFlag', postId: post.id });
         }
 
-        const { openInNewTab = true } = await browser.storage.local.get({ openInNewTab: true });
-
+        const { openInNewTab } = await browser.storage.local.get({ openInNewTab: true });
         const [currentTab] = await browser.tabs.query({ active: true, currentWindow: true });
-        const existingTabs = await browser.tabs.query({ url: `${post.url.split('#')[0]}*` });
 
-        if (openInNewTab && existingTabs.length === 0) {
+        if (openInNewTab) {
             browser.tabs.create({ url: targetUrl, index: currentTab.index + 1 });
         } else {
-            const tabToUpdate = existingTabs.length > 0 ? existingTabs[0] : currentTab;
-            browser.tabs.update(tabToUpdate.id, { active: true, url: targetUrl });
+            browser.tabs.update(currentTab.id, { url: targetUrl });
         }
         window.close();
     });
@@ -157,7 +133,7 @@ function createSavedPostElement(post) {
     deleteBtn.textContent = '刪除';
     deleteBtn.addEventListener('click', async () => {
         item.style.opacity = '0.5';
-        await sendMessageWithRetry({ action: 'deletePost', id: post.id });
+        await browser.runtime.sendMessage({ action: 'deletePost', id: post.id });
         item.remove();
         if (document.querySelectorAll('#saved-posts-container .post-item').length === 0) {
             loadSavedPosts();
@@ -179,7 +155,7 @@ function createHiddenThreadElement(threadNo) {
     unhideBtn.textContent = '解除隱藏';
     unhideBtn.addEventListener('click', async () => {
         item.style.opacity = '0.5';
-        await sendMessageWithRetry({ action: 'unhideThread', threadNo: threadNo });
+        await browser.runtime.sendMessage({ action: 'unhideThread', threadNo: threadNo });
         item.remove();
         if (document.querySelectorAll('#hidden-threads-container .hidden-item').length === 0) {
             loadHiddenThreads();
@@ -204,7 +180,7 @@ function createNgIdElement(ngId) {
     removeBtn.textContent = '移除';
     removeBtn.addEventListener('click', async () => {
         item.style.opacity = '0.5';
-        await sendMessageWithRetry({ action: 'removeNgId', ngId: ngId });
+        await browser.runtime.sendMessage({ action: 'removeNgId', ngId: ngId });
         item.remove();
         if (document.querySelectorAll('#ngid-list .ngid-item').length === 0) {
             loadNgIds();
@@ -221,7 +197,7 @@ function setupNgIdTab() {
     const addId = async () => {
         const idToAdd = input.value.trim();
         if (idToAdd) {
-            await sendMessageWithRetry({ action: 'addNgId', ngId: idToAdd });
+            await browser.runtime.sendMessage({ action: 'addNgId', ngId: idToAdd });
             input.value = '';
             loadNgIds();
         }
@@ -237,9 +213,12 @@ async function initializeSettings() {
     const maxRecordsInput = document.getElementById('max-records-input');
     const autoCheckEnabledCheckbox = document.getElementById('auto-check-enabled');
     const checkIntervalInput = document.getElementById('check-interval-input');
+    const autoCleanupEnabledCheckbox = document.getElementById('auto-cleanup-enabled');
+    const cleanupDaysInput = document.getElementById('cleanup-days-input');
 
     const settings = await browser.storage.local.get({
-        openInNewTab: true, maxRecords: 50, autoCheckEnabled: false, checkInterval: 300
+        openInNewTab: true, maxRecords: 50, autoCheckEnabled: false, checkInterval: 300,
+        autoCleanupEnabled: true, cleanupDays: 30
     });
 
     openInNewTabCheckbox.checked = settings.openInNewTab;
@@ -253,7 +232,7 @@ async function initializeSettings() {
         if (isNaN(value) || value < 1) value = 1;
         maxRecordsInput.value = value;
         await browser.storage.local.set({ maxRecords: value });
-        await sendMessageWithRetry({ action: 'trimRecords' });
+        await browser.runtime.sendMessage({ action: 'trimRecords' });
         loadSavedPosts();
     });
 
@@ -270,35 +249,29 @@ async function initializeSettings() {
         }
         checkIntervalInput.disabled = !enabled;
         browser.storage.local.set({ autoCheckEnabled: enabled, checkInterval: interval });
-        sendMessageWithRetry({ action: 'updateAlarm' });
+        browser.runtime.sendMessage({ action: 'updateAlarm' });
     };
 
     autoCheckEnabledCheckbox.addEventListener('change', handleAutoCheckSettingsChange);
     checkIntervalInput.addEventListener('change', handleAutoCheckSettingsChange);
-}
 
-// 設定手動重載按鈕的功能
-function setupReapplyButton() {
-    const btn = document.getElementById('reapply-ng-btn');
-    if (!btn) return;
+    autoCleanupEnabledCheckbox.checked = settings.autoCleanupEnabled;
+    cleanupDaysInput.value = settings.cleanupDays;
+    cleanupDaysInput.disabled = !settings.autoCleanupEnabled;
 
-    btn.addEventListener('click', async () => {
-        const tabs = await browser.tabs.query({
-            active: true,
-            currentWindow: true,
-            url: "*://*.komica1.org/*"
-        });
-
-        if (tabs.length > 0) {
-            const targetTab = tabs[0];
-            browser.tabs.sendMessage(targetTab.id, { action: 'reapplyFunctions' });
-            btn.textContent = '指令已傳送！';
-            btn.disabled = true;
-            setTimeout(() => window.close(), 500);
-        } else {
-            btn.textContent = '找不到 Komica 分頁';
-            btn.disabled = true;
+    const handleCleanupSettingsChange = () => {
+        const enabled = autoCleanupEnabledCheckbox.checked;
+        let days = parseInt(cleanupDaysInput.value, 10);
+        if (isNaN(days) || days < 1) {
+            days = 1;
+            cleanupDaysInput.value = days;
         }
-    });
+        cleanupDaysInput.disabled = !enabled;
+        browser.storage.local.set({ autoCleanupEnabled: enabled, cleanupDays: days });
+        browser.runtime.sendMessage({ action: 'runCleanup' });
+    };
+
+    autoCleanupEnabledCheckbox.addEventListener('change', handleCleanupSettingsChange);
+    cleanupDaysInput.addEventListener('change', handleCleanupSettingsChange);
 }
 
