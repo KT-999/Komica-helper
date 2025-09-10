@@ -1,10 +1,8 @@
 /**
- * Komica Post Saver - Popup Script (v1.7.0)
+ * Komica Post Saver - Popup Script (v1.8.0)
  *
  * 變更：
- * 1. 修正點擊「已記憶」項目的邏輯，使其符合以下流程：
- * - 如果目標討論串的分頁已存在，則跳轉至該分頁並強制重整，定位到新回應。
- * - 如果分頁不存在，則在右側開啟新分頁。
+ * 1. 重新加入「手動重載功能」按鈕的邏輯。
  */
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -12,6 +10,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initializeSettings();
     loadSavedPosts();
     setupNgIdTab();
+    setupReapplyButton(); // 補入功能
 });
 
 // --- 分頁管理 ---
@@ -92,10 +91,10 @@ function createSavedPostElement(post) {
         indicator.title = `新增 ${post.newReplyCount} 則回應`;
         item.appendChild(indicator);
     }
-
+    
     const content = document.createElement('div');
     content.className = 'post-content';
-
+    
     const titleDiv = document.createElement('div');
     titleDiv.className = 'post-title';
     titleDiv.title = post.title;
@@ -107,10 +106,8 @@ function createSavedPostElement(post) {
 
     content.appendChild(titleDiv);
     content.appendChild(previewDiv);
-
-    // **核心邏輯修正處**
+    
     content.addEventListener('click', async () => {
-        // 1. 決定目標網址 (有新回應就跳新回應，否則跳主樓)
         let targetUrl;
         if (post.hasUpdate && post.firstNewReplyNo) {
             targetUrl = `${post.url.split('#')[0]}#r${post.firstNewReplyNo}`;
@@ -118,37 +115,22 @@ function createSavedPostElement(post) {
             targetUrl = `${post.url.split('#')[0]}#r${post.postNo}`;
         }
 
-        // 2. 點擊後立即清除更新旗標
         if (post.hasUpdate) {
             await browser.runtime.sendMessage({ action: 'clearUpdateFlag', postId: post.id });
         }
-
-        // 3. 檢查分頁是否存在 (忽略 # 錨點)
+        
         const baseUrl = post.url.split('#')[0];
         const existingTabs = await browser.tabs.query({ url: `${baseUrl}*` });
 
         if (existingTabs.length > 0) {
-            // 4a. 如果分頁存在：跳轉、重整、定位
-            // 為了確保重整，我們在 URL 加上一個隨機參數 (cache buster)
             const reloadUrl = new URL(targetUrl);
-            reloadUrl.searchParams.set('_ktr', Date.now()); // _ktr = Komica Thread Reloader
+            reloadUrl.searchParams.set('_ktr', Date.now());
             const finalUrl = reloadUrl.href;
-
-            browser.tabs.update(existingTabs[0].id, {
-                active: true,
-                url: finalUrl
-            });
-
+            browser.tabs.update(existingTabs[0].id, { active: true, url: finalUrl });
         } else {
-            // 4b. 如果分頁不存在：在右邊開啟新分頁
             const [currentTab] = await browser.tabs.query({ active: true, currentWindow: true });
-            browser.tabs.create({
-                url: targetUrl,
-                index: currentTab.index + 1
-            });
+            browser.tabs.create({ url: targetUrl, index: currentTab.index + 1 });
         }
-
-        // 5. 關閉 popup
         window.close();
     });
 
@@ -193,7 +175,7 @@ function createHiddenThreadElement(threadNo) {
 function createNgIdElement(ngId) {
     const item = document.createElement('div');
     item.className = 'ngid-item';
-
+    
     const ngIdSpan = document.createElement('span');
     ngIdSpan.className = 'ngid-text';
     ngIdSpan.textContent = ngId;
@@ -232,6 +214,34 @@ function setupNgIdTab() {
     });
 }
 
+// **補入功能**
+function setupReapplyButton() {
+    const btn = document.getElementById('reapply-functions-btn');
+    if (!btn) return;
+
+    btn.addEventListener('click', async () => {
+        const tabs = await browser.tabs.query({ 
+            active: true, 
+            currentWindow: true,
+            url: "*://*.komica1.org/*" 
+        });
+
+        if (tabs.length > 0) {
+            const targetTab = tabs[0];
+            try {
+                await browser.tabs.sendMessage(targetTab.id, { action: 'reapplyFunctions' });
+                btn.textContent = '指令已傳送！';
+            } catch (e) {
+                btn.textContent = '傳送失敗，請重整頁面';
+            }
+        } else {
+            btn.textContent = '找不到 Komica 分頁';
+        }
+        btn.disabled = true;
+        setTimeout(() => window.close(), 1000);
+    });
+}
+
 async function initializeSettings() {
     const openInNewTabCheckbox = document.getElementById('open-in-new-tab-checkbox');
     const maxRecordsInput = document.getElementById('max-records-input');
@@ -244,8 +254,7 @@ async function initializeSettings() {
         openInNewTab: true, maxRecords: 50, autoCheckEnabled: false, checkInterval: 300,
         autoCleanupEnabled: true, cleanupDays: 30
     });
-
-    // 這項設定在新邏輯下已無作用，但保留 UI 以免其他地方出錯
+    
     openInNewTabCheckbox.checked = settings.openInNewTab;
     openInNewTabCheckbox.addEventListener('change', () => {
         browser.storage.local.set({ openInNewTab: openInNewTabCheckbox.checked });
