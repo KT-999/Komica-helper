@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Komica 貼文記憶器",
-  "version": "1.4.2",
+  "version": "1.4.2.1",
   "description": "在支援的 Komica 網站上新增記憶、隱藏按鈕，並提供 NGID 過濾功能，方便您追蹤與管理討論串。",
   "icons": {
     "48": "icons/icon-48.png",
@@ -57,7 +57,11 @@
   "browser_specific_settings": {
     "gecko": {
       "id": "komica-helper@kenny",
-      "strict_min_version": "109.0"
+      "strict_min_version": "109.0",
+      "data_collection_permissions": {
+        "required": ["none"]
+      }
     }
   }
 }
+
