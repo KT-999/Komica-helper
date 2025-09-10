@@ -1,9 +1,10 @@
 /**
- * Komica Post Saver - Popup Script (v1.6.0 Fix)
+ * Komica Post Saver - Popup Script (v1.7.0)
  *
  * 變更：
- * 1. 新增自動清理相關設定的 UI 邏輯。
- * 2. 確保所有 DOM 元素和事件監聽都正確初始化。
+ * 1. 修正點擊「已記憶」項目的邏輯，使其符合以下流程：
+ * - 如果目標討論串的分頁已存在，則跳轉至該分頁並強制重整，定位到新回應。
+ * - 如果分頁不存在，則在右側開啟新分頁。
  */
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -107,24 +108,47 @@ function createSavedPostElement(post) {
     content.appendChild(titleDiv);
     content.appendChild(previewDiv);
 
+    // **核心邏輯修正處**
     content.addEventListener('click', async () => {
-        let targetUrl = `${post.url.split('#')[0]}#r${post.postNo}`;
+        // 1. 決定目標網址 (有新回應就跳新回應，否則跳主樓)
+        let targetUrl;
         if (post.hasUpdate && post.firstNewReplyNo) {
             targetUrl = `${post.url.split('#')[0]}#r${post.firstNewReplyNo}`;
+        } else {
+            targetUrl = `${post.url.split('#')[0]}#r${post.postNo}`;
         }
 
+        // 2. 點擊後立即清除更新旗標
         if (post.hasUpdate) {
             await browser.runtime.sendMessage({ action: 'clearUpdateFlag', postId: post.id });
         }
 
-        const { openInNewTab } = await browser.storage.local.get({ openInNewTab: true });
-        const [currentTab] = await browser.tabs.query({ active: true, currentWindow: true });
+        // 3. 檢查分頁是否存在 (忽略 # 錨點)
+        const baseUrl = post.url.split('#')[0];
+        const existingTabs = await browser.tabs.query({ url: `${baseUrl}*` });
 
-        if (openInNewTab) {
-            browser.tabs.create({ url: targetUrl, index: currentTab.index + 1 });
+        if (existingTabs.length > 0) {
+            // 4a. 如果分頁存在：跳轉、重整、定位
+            // 為了確保重整，我們在 URL 加上一個隨機參數 (cache buster)
+            const reloadUrl = new URL(targetUrl);
+            reloadUrl.searchParams.set('_ktr', Date.now()); // _ktr = Komica Thread Reloader
+            const finalUrl = reloadUrl.href;
+
+            browser.tabs.update(existingTabs[0].id, {
+                active: true,
+                url: finalUrl
+            });
+
         } else {
-            browser.tabs.update(currentTab.id, { url: targetUrl });
+            // 4b. 如果分頁不存在：在右邊開啟新分頁
+            const [currentTab] = await browser.tabs.query({ active: true, currentWindow: true });
+            browser.tabs.create({
+                url: targetUrl,
+                index: currentTab.index + 1
+            });
         }
+
+        // 5. 關閉 popup
         window.close();
     });
 
@@ -221,6 +245,7 @@ async function initializeSettings() {
         autoCleanupEnabled: true, cleanupDays: 30
     });
 
+    // 這項設定在新邏輯下已無作用，但保留 UI 以免其他地方出錯
     openInNewTabCheckbox.checked = settings.openInNewTab;
     openInNewTabCheckbox.addEventListener('change', () => {
         browser.storage.local.set({ openInNewTab: openInNewTabCheckbox.checked });
