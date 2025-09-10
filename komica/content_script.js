@@ -1,20 +1,38 @@
 /**
- * Komica Post Saver - Content Script (改良版)
+ * Komica Post Saver - Content Script (v1.5.0 Stable)
  *
- * 功能：
- * 1. 注入「記憶此串」、「隱藏此串」、「NGID」按鈕。
- * 2. 實現 NGID 過濾邏輯。
- * 3. 監聽背景指令以同步 UI 狀態。
- * 4. 在頁面載入時，主動檢查並重設更新基準。
- * 5. 改良：使用 `MutationObserver` 替代 `setTimeout`，可靠地處理動態載入的內容。
- * 6. 新增：接收來自 Popup 的手動重載指令。
+ * 變更：
+ * 1. 新增 sendMessageWithRetry 函式，解決因背景腳本休眠導致的初始化失敗問題。
+ * 2. 重構 initialize 函式，確保在獲取到必要資料後才執行頁面操作。
+ * 3. 保留 MutationObserver 以處理頁面動態內容。
  */
 
 // --- 全域變數 ---
 let currentNgIds = [];
 
-// --- 訊息監聽 ---
+// --- 核心通訊函式 (新增) ---
+async function sendMessageWithRetry(message, retries = 4, delay = 100) {
+    for (let i = 0; i < retries; i++) {
+        try {
+            const response = await browser.runtime.sendMessage(message);
+            // 檢查 response 是否為 undefined，有時擴充功能在重載時會發生
+            if (typeof response !== 'undefined') {
+                return response;
+            }
+        } catch (e) {
+            if (i === retries - 1) { // 如果是最後一次重試
+                console.error(`Komica Helper: 訊息傳送失敗 (重試 ${retries} 次後)。`, message, e);
+                // 回傳一個失敗的物件結構，讓呼叫方可以處理
+                return { success: false, error: e.message };
+            }
+            // 使用指數退讓策略等待，例如 100ms, 200ms, 400ms...
+            await new Promise(resolve => setTimeout(resolve, delay * Math.pow(2, i)));
+        }
+    }
+}
 
+
+// --- 訊息監聽 ---
 browser.runtime.onMessage.addListener((message) => {
     switch (message.action) {
         case 'updateButtonUI':
@@ -24,28 +42,28 @@ browser.runtime.onMessage.addListener((message) => {
             unhideElement(`.thread[data-no="${message.threadNo}"]`, '[隱藏此串]');
             break;
         case 'applyNgIdFilter':
-            applyNgIdFilter();
+            applyNgIdFilter(); // 由背景觸發的全局重濾
             break;
         case 'unhidePostsByNgId':
             unhidePostsByNgId(message.ngId);
             break;
-        // 新增：處理來自 popup 的重載指令
-        case 'reapplyFunctions':
-            console.log('收到重載指令，重新處理頁面元素...');
-            processElements();
-            applyNgIdFilter();
+        case 'reapplyFunctions': // 來自 popup 的手動重載指令
+            console.log('Komica Helper: 收到重載指令，重新處理頁面元素...');
+            initialize();
             break;
     }
-    return true;
+    return true; // 保持通道開啟以進行非同步回應
 });
 
 // --- 核心功能 ---
 
-// 根據 NGID 列表過濾頁面內容
-async function applyNgIdFilter() {
-    const { success, data: ngIds } = await browser.runtime.sendMessage({ action: 'getNgIds' });
-    if (!success) return;
-    currentNgIds = ngIds || [];
+// 根據 NGID 列表過濾頁面內容 (可選擇是否重新獲取列表)
+async function applyNgIdFilter(skipFetch = false) {
+    if (!skipFetch) {
+        const response = await sendMessageWithRetry({ action: 'getNgIds' });
+        if (!response.success) return;
+        currentNgIds = response.data || [];
+    }
 
     document.querySelectorAll('.komica-ngid-btn').forEach(btn => {
         updateNgIdButtonState(btn, btn.dataset.ngid);
@@ -63,12 +81,14 @@ async function applyNgIdFilter() {
                 targetElement.style.display = 'none';
                 targetElement.dataset.hiddenByNgid = currentId;
             } else if (targetElement.dataset.hiddenByNgid === currentId) {
+                // 只有當這個元素是被這個 ID 隱藏時才將其顯示
                 targetElement.style.display = '';
                 delete targetElement.dataset.hiddenByNgid;
             }
         }
     });
 }
+
 
 // 解除由特定 NGID 隱藏的內容
 function unhidePostsByNgId(ngId) {
@@ -84,24 +104,24 @@ function unhidePostsByNgId(ngId) {
 
 // 主動檢查並重設「記憶」功能的更新基準
 async function proactiveUpdateReset() {
-    const { success, data: savedPosts } = await browser.runtime.sendMessage({ action: 'getAllPosts' });
-    if (!success || !savedPosts || savedPosts.length === 0) return;
+    const response = await sendMessageWithRetry({ action: 'getAllPosts' });
+    if (!response.success || !response.data || response.data.length === 0) return;
 
     document.querySelectorAll('.thread').forEach(threadElement => {
         const threadNo = threadElement.dataset.no;
-        const savedPost = savedPosts.find(p => p.url.includes(`res=${threadNo}`));
+        const savedPost = response.data.find(p => p.url.includes(`res=${threadNo}`));
         if (savedPost && savedPost.hasUpdate) {
-            browser.runtime.sendMessage({ action: 'clearUpdateFlag', postId: savedPost.id });
+            sendMessageWithRetry({ action: 'clearUpdateFlag', postId: savedPost.id });
         }
     });
 }
 
 // 在頁面載入時，隱藏所有已記錄的串
 async function hideStoredThreads() {
-    const { success, data: hiddenThreads } = await browser.runtime.sendMessage({ action: 'getHiddenThreads' });
-    if (!success || !hiddenThreads || hiddenThreads.length === 0) return;
+    const response = await sendMessageWithRetry({ action: 'getHiddenThreads' });
+    if (!response.success || !response.data || response.data.length === 0) return;
 
-    hiddenThreads.forEach(threadNo => {
+    response.data.forEach(threadNo => {
         const threadElement = document.querySelector(`.thread[data-no="${threadNo}"]`);
         if (threadElement) {
             threadElement.style.display = 'none';
@@ -142,7 +162,7 @@ function addSaveButtonToPost(postElement) {
             lastCheckedReplyNo: lastReplyNo, hasUpdate: false, newReplyCount: 0,
             firstNewReplyNo: null
         };
-        await browser.runtime.sendMessage({ action: 'toggleSavePost', data: postData });
+        await sendMessageWithRetry({ action: 'toggleSavePost', data: postData });
         await updateSaveButtonState(saveButton, postNo);
     });
 
@@ -175,7 +195,7 @@ function addHideButtonToThread(threadElement) {
     hideButton.addEventListener('click', async () => {
         threadElement.style.display = 'none';
         hideButton.textContent = '[已隱藏]';
-        await browser.runtime.sendMessage({ action: 'hideThread', threadNo: threadNo });
+        await sendMessageWithRetry({ action: 'hideThread', threadNo: threadNo });
     });
 
     const saveButton = postHead.querySelector('.komica-saver-btn');
@@ -196,15 +216,15 @@ function addNgIdButtonToPost(postElement) {
     ngButton.style.marginLeft = '5px';
     ngButton.style.cursor = 'pointer';
     ngButton.style.fontWeight = 'bold';
-    
+
     updateNgIdButtonState(ngButton, ngId);
 
     ngButton.addEventListener('click', async () => {
         const isCurrentlyNg = currentNgIds.includes(ngId);
         if (isCurrentlyNg) {
-            await browser.runtime.sendMessage({ action: 'removeNgId', ngId: ngId });
+            await sendMessageWithRetry({ action: 'removeNgId', ngId: ngId });
         } else {
-            await browser.runtime.sendMessage({ action: 'addNgId', ngId: ngId });
+            await sendMessageWithRetry({ action: 'addNgId', ngId: ngId });
         }
     });
 
@@ -235,7 +255,7 @@ function updateSaveButtonAppearance(postNo, isSaved) {
 }
 
 async function updateSaveButtonState(button, postNo) {
-    const result = await browser.runtime.sendMessage({ action: 'isPostSaved', postNo: postNo });
+    const result = await sendMessageWithRetry({ action: 'isPostSaved', postNo: postNo });
     if (result && result.success) {
         updateSaveButtonAppearance(postNo, result.isSaved);
     }
@@ -257,8 +277,6 @@ function processElements() {
     document.querySelectorAll('.thread').forEach(addHideButtonToThread);
 }
 
-// --- 初始執行與監聽 (改良版) ---
-
 // 設定 MutationObserver 來監視 DOM 變化
 function setupObserver() {
     const callback = (mutationsList, observer) => {
@@ -266,34 +284,39 @@ function setupObserver() {
             if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
                 mutation.addedNodes.forEach(node => {
                     if (node.nodeType === Node.ELEMENT_NODE) {
-                        if (node.matches('.post')) {
-                            addSaveButtonToPost(node);
-                            addNgIdButtonToPost(node);
+                        if (node.matches('.post, .thread') || node.querySelector('.post, .thread')) {
+                            processElements(); // 重新處理所有元素
+                            applyNgIdFilter(true); // 套用篩選，但不重新獲取列表
                         }
-                        if (node.matches('.thread')) {
-                            addHideButtonToThread(node);
-                        }
-                        node.querySelectorAll('.post').forEach(post => {
-                            addSaveButtonToPost(post);
-                            addNgIdButtonToPost(post);
-                        });
-                        node.querySelectorAll('.thread').forEach(addHideButtonToThread);
                     }
                 });
             }
         }
     };
-
     const observer = new MutationObserver(callback);
     observer.observe(document.body, { childList: true, subtree: true });
 }
 
+// --- 初始執行 ---
 async function initialize() {
-    await applyNgIdFilter();
-    processElements();
-    proactiveUpdateReset();
-    hideStoredThreads();
-    setupObserver(); // 使用新的 observer
+    console.log("Komica Helper: Initializing...");
+    // 優先且可靠地獲取 NGID 列表
+    const response = await sendMessageWithRetry({ action: 'getNgIds' });
+
+    if (response.success) {
+        console.log("Komica Helper: Successfully connected to background script.");
+        currentNgIds = response.data || [];
+
+        // 獲取成功後，才執行所有頁面操作
+        applyNgIdFilter(true); // 套用篩選 (跳過重新獲取)
+        processElements();
+        proactiveUpdateReset();
+        hideStoredThreads();
+        setupObserver();
+    } else {
+        console.error("Komica Helper: Could not initialize. Failed to fetch initial data from background script.");
+    }
 }
 
 initialize();
+

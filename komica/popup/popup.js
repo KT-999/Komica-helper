@@ -1,22 +1,33 @@
 /**
- * Komica Post Saver - Popup Script (改良版)
+ * Komica Post Saver - Popup Script (v1.5.0 Stable)
  *
- * 功能：
- * 1. 實現分頁切換 (已記憶 / 已隱藏 / NGID)。
- * 2. 載入並顯示對應列表的內容，並加入錯誤處理。
- * 3. 管理所有設定選項。
- * 4. 處理新增和刪除 NGID 的互動。
- * 5. 修正：點擊已更新的串時，會「強制重整」分頁並跳轉到第一則新回應。
- * 6. 安全性修正：避免使用 innerHTML 來插入動態內容。
- * 7. 新增：加入手動重載頁面功能的按鈕邏輯。
+ * 變更：
+ * 1. 引入 sendMessageWithRetry 邏輯，增強與背景腳本通訊的穩定性。
+ * 2. 新增手動重載按鈕。
  */
+
+// --- 核心通訊函式 ---
+async function sendMessageWithRetry(message, retries = 3, delay = 100) {
+    for (let i = 0; i < retries; i++) {
+        try {
+            const response = await browser.runtime.sendMessage(message);
+            if (typeof response !== 'undefined') return response;
+        } catch (e) {
+            if (i === retries - 1) {
+                console.error(`Popup: 訊息傳送失敗`, message, e);
+                return { success: false, error: e.message };
+            }
+            await new Promise(resolve => setTimeout(resolve, delay));
+        }
+    }
+}
 
 document.addEventListener('DOMContentLoaded', () => {
     setupTabs();
     initializeSettings();
     loadSavedPosts();
     setupNgIdTab();
-    setupReapplyButton(); // 新增：初始化手動重載按鈕
+    setupReapplyButton();
 });
 
 // --- 分頁管理 ---
@@ -47,7 +58,7 @@ async function loadSavedPosts() {
     const container = document.getElementById('saved-posts-container');
     container.innerHTML = '<div class="loader">讀取中...</div>';
     try {
-        const response = await browser.runtime.sendMessage({ action: 'getAllPosts' });
+        const response = await sendMessageWithRetry({ action: 'getAllPosts' });
         container.innerHTML = '';
         if (response && response.success && response.data.length > 0) {
             response.data.forEach(post => container.appendChild(createSavedPostElement(post)));
@@ -63,7 +74,7 @@ async function loadHiddenThreads() {
     const container = document.getElementById('hidden-threads-container');
     container.innerHTML = '<div class="loader">讀取中...</div>';
     try {
-        const response = await browser.runtime.sendMessage({ action: 'getHiddenThreads' });
+        const response = await sendMessageWithRetry({ action: 'getHiddenThreads' });
         container.innerHTML = '';
         if (response && response.success && response.data.length > 0) {
             response.data.forEach(threadNo => container.appendChild(createHiddenThreadElement(threadNo)));
@@ -78,7 +89,7 @@ async function loadHiddenThreads() {
 async function loadNgIds() {
     const container = document.getElementById('ngid-list');
     container.innerHTML = '<div class="loader">讀取中...</div>';
-    const response = await browser.runtime.sendMessage({ action: 'getNgIds' });
+    const response = await sendMessageWithRetry({ action: 'getNgIds' });
     container.innerHTML = '';
     if (response && response.success && response.data.length > 0) {
         response.data.forEach(ngId => container.appendChild(createNgIdElement(ngId)));
@@ -99,10 +110,10 @@ function createSavedPostElement(post) {
         indicator.title = `新增 ${post.newReplyCount} 則回應`;
         item.appendChild(indicator);
     }
-    
+
     const content = document.createElement('div');
     content.className = 'post-content';
-    
+
     const titleDiv = document.createElement('div');
     titleDiv.className = 'post-title';
     titleDiv.title = post.title;
@@ -114,7 +125,7 @@ function createSavedPostElement(post) {
 
     content.appendChild(titleDiv);
     content.appendChild(previewDiv);
-    
+
     content.addEventListener('click', async () => {
         let targetUrl;
         if (post.hasUpdate && post.firstNewReplyNo) {
@@ -124,30 +135,19 @@ function createSavedPostElement(post) {
         }
 
         if (post.hasUpdate) {
-            await browser.runtime.sendMessage({ action: 'clearUpdateFlag', postId: post.id });
+            await sendMessageWithRetry({ action: 'clearUpdateFlag', postId: post.id });
         }
-        
-        const shouldOpenInNewTab = document.getElementById('open-in-new-tab-checkbox').checked;
 
-        if (shouldOpenInNewTab) {
-            const existingTabs = await browser.tabs.query({ url: `${post.url.split('#')[0]}*` });
-            if (existingTabs.length > 0) {
-                const reloadUrl = new URL(targetUrl);
-                reloadUrl.searchParams.set('ks_reload', Date.now());
-                const finalUrl = reloadUrl.href;
+        const { openInNewTab = true } = await browser.storage.local.get({ openInNewTab: true });
 
-                browser.tabs.update(existingTabs[0].id, { active: true, url: finalUrl });
-            } else {
-                const [currentTab] = await browser.tabs.query({ active: true, currentWindow: true });
-                browser.tabs.create({ url: targetUrl, index: currentTab.index + 1 });
-            }
+        const [currentTab] = await browser.tabs.query({ active: true, currentWindow: true });
+        const existingTabs = await browser.tabs.query({ url: `${post.url.split('#')[0]}*` });
+
+        if (openInNewTab && existingTabs.length === 0) {
+            browser.tabs.create({ url: targetUrl, index: currentTab.index + 1 });
         } else {
-            const reloadUrl = new URL(targetUrl);
-            reloadUrl.searchParams.set('ks_reload', Date.now());
-            const finalUrl = reloadUrl.href;
-            
-            const [currentTab] = await browser.tabs.query({ active: true, currentWindow: true });
-            if (currentTab) browser.tabs.update(currentTab.id, { url: finalUrl });
+            const tabToUpdate = existingTabs.length > 0 ? existingTabs[0] : currentTab;
+            browser.tabs.update(tabToUpdate.id, { active: true, url: targetUrl });
         }
         window.close();
     });
@@ -157,7 +157,7 @@ function createSavedPostElement(post) {
     deleteBtn.textContent = '刪除';
     deleteBtn.addEventListener('click', async () => {
         item.style.opacity = '0.5';
-        await browser.runtime.sendMessage({ action: 'deletePost', id: post.id });
+        await sendMessageWithRetry({ action: 'deletePost', id: post.id });
         item.remove();
         if (document.querySelectorAll('#saved-posts-container .post-item').length === 0) {
             loadSavedPosts();
@@ -179,7 +179,7 @@ function createHiddenThreadElement(threadNo) {
     unhideBtn.textContent = '解除隱藏';
     unhideBtn.addEventListener('click', async () => {
         item.style.opacity = '0.5';
-        await browser.runtime.sendMessage({ action: 'unhideThread', threadNo: threadNo });
+        await sendMessageWithRetry({ action: 'unhideThread', threadNo: threadNo });
         item.remove();
         if (document.querySelectorAll('#hidden-threads-container .hidden-item').length === 0) {
             loadHiddenThreads();
@@ -193,7 +193,7 @@ function createHiddenThreadElement(threadNo) {
 function createNgIdElement(ngId) {
     const item = document.createElement('div');
     item.className = 'ngid-item';
-    
+
     const ngIdSpan = document.createElement('span');
     ngIdSpan.className = 'ngid-text';
     ngIdSpan.textContent = ngId;
@@ -204,7 +204,7 @@ function createNgIdElement(ngId) {
     removeBtn.textContent = '移除';
     removeBtn.addEventListener('click', async () => {
         item.style.opacity = '0.5';
-        await browser.runtime.sendMessage({ action: 'removeNgId', ngId: ngId });
+        await sendMessageWithRetry({ action: 'removeNgId', ngId: ngId });
         item.remove();
         if (document.querySelectorAll('#ngid-list .ngid-item').length === 0) {
             loadNgIds();
@@ -221,7 +221,7 @@ function setupNgIdTab() {
     const addId = async () => {
         const idToAdd = input.value.trim();
         if (idToAdd) {
-            await browser.runtime.sendMessage({ action: 'addNgId', ngId: idToAdd });
+            await sendMessageWithRetry({ action: 'addNgId', ngId: idToAdd });
             input.value = '';
             loadNgIds();
         }
@@ -229,34 +229,6 @@ function setupNgIdTab() {
     addButton.addEventListener('click', addId);
     input.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') addId();
-    });
-}
-
-// 新增：設定手動重載按鈕的功能
-function setupReapplyButton() {
-    const btn = document.getElementById('reapply-ng-btn');
-    if (!btn) return;
-
-    btn.addEventListener('click', async () => {
-        // 尋找當前視窗中活躍的 Komica 分頁
-        const tabs = await browser.tabs.query({ 
-            active: true, 
-            currentWindow: true,
-            url: "*://*.komica1.org/*" 
-        });
-
-        if (tabs.length > 0) {
-            const targetTab = tabs[0];
-            // 發送訊息到 content_script
-            browser.tabs.sendMessage(targetTab.id, { action: 'reapplyFunctions' });
-            
-            btn.textContent = '指令已傳送！';
-            btn.disabled = true;
-            setTimeout(() => window.close(), 500); // 延遲半秒後關閉 popup
-        } else {
-            btn.textContent = '找不到 Komica 分頁';
-            btn.disabled = true;
-        }
     });
 }
 
@@ -269,7 +241,7 @@ async function initializeSettings() {
     const settings = await browser.storage.local.get({
         openInNewTab: true, maxRecords: 50, autoCheckEnabled: false, checkInterval: 300
     });
-    
+
     openInNewTabCheckbox.checked = settings.openInNewTab;
     openInNewTabCheckbox.addEventListener('change', () => {
         browser.storage.local.set({ openInNewTab: openInNewTabCheckbox.checked });
@@ -281,7 +253,7 @@ async function initializeSettings() {
         if (isNaN(value) || value < 1) value = 1;
         maxRecordsInput.value = value;
         await browser.storage.local.set({ maxRecords: value });
-        await browser.runtime.sendMessage({ action: 'trimRecords' });
+        await sendMessageWithRetry({ action: 'trimRecords' });
         loadSavedPosts();
     });
 
@@ -298,9 +270,35 @@ async function initializeSettings() {
         }
         checkIntervalInput.disabled = !enabled;
         browser.storage.local.set({ autoCheckEnabled: enabled, checkInterval: interval });
-        browser.runtime.sendMessage({ action: 'updateAlarm' });
+        sendMessageWithRetry({ action: 'updateAlarm' });
     };
 
     autoCheckEnabledCheckbox.addEventListener('change', handleAutoCheckSettingsChange);
     checkIntervalInput.addEventListener('change', handleAutoCheckSettingsChange);
 }
+
+// 設定手動重載按鈕的功能
+function setupReapplyButton() {
+    const btn = document.getElementById('reapply-ng-btn');
+    if (!btn) return;
+
+    btn.addEventListener('click', async () => {
+        const tabs = await browser.tabs.query({
+            active: true,
+            currentWindow: true,
+            url: "*://*.komica1.org/*"
+        });
+
+        if (tabs.length > 0) {
+            const targetTab = tabs[0];
+            browser.tabs.sendMessage(targetTab.id, { action: 'reapplyFunctions' });
+            btn.textContent = '指令已傳送！';
+            btn.disabled = true;
+            setTimeout(() => window.close(), 500);
+        } else {
+            btn.textContent = '找不到 Komica 分頁';
+            btn.disabled = true;
+        }
+    });
+}
+

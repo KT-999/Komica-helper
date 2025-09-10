@@ -70,7 +70,7 @@ browser.alarms.onAlarm.addListener(async (alarm) => {
                 const newLastReplyNo = parseInt(lastPostOnPage.dataset.no, 10);
                 if (newLastReplyNo > post.lastCheckedReplyNo) {
                     const newRepliesSinceLastView = allReplies.filter(r => parseInt(r.dataset.no, 10) > post.initialReplyNo);
-                    
+
                     // **新增：如果這是第一次偵測到更新，記錄下第一則新回應的編號**
                     if (newRepliesSinceLastView.length > 0 && !post.hasUpdate) {
                         post.firstNewReplyNo = parseInt(newRepliesSinceLastView[0].dataset.no, 10);
@@ -81,7 +81,7 @@ browser.alarms.onAlarm.addListener(async (alarm) => {
                     post.hasUpdate = true;
                     hasChanges = true;
                 }
-            } catch (error) {}
+            } catch (error) { }
         }
         if (hasChanges) {
             await browser.storage.local.set({ savedPosts });
@@ -239,8 +239,16 @@ async function notifyTabsOfUpdate(postNo, isSaved) {
 }
 
 async function notifyAllTabs(message) {
-    const tabs = await browser.tabs.query({ url: "*://*.komica1.org/*" });
-    for (const tab of tabs) {
-        browser.tabs.sendMessage(tab.id, message).catch(e => {});
+    try {
+        const tabs = await browser.tabs.query({ url: "*://*.komica1.org/*" });
+        for (const tab of tabs) {
+            try {
+                await browser.tabs.sendMessage(tab.id, message);
+            } catch (e) {
+                // 通常是因為 content_script 不在該分頁上，可以安全忽略
+            }
+        }
+    } catch (e) {
+        console.error("Komica Helper: Failed to query or send message to tabs.", e);
     }
 }

@@ -18,6 +18,7 @@ body {
 .tabs {
     display: flex;
 }
+
 .tab-btn {
     flex: 1;
     padding: 10px;
@@ -28,9 +29,11 @@ body {
     border-bottom: 3px solid transparent;
     transition: all 0.2s;
 }
+
 .tab-btn:hover {
     background-color: #e0e0e0;
 }
+
 .tab-btn.active {
     border-bottom-color: #007bff;
     font-weight: bold;
@@ -42,33 +45,52 @@ body {
     max-height: 340px;
     overflow-y: auto;
 }
+
 .content-panel.active {
     display: block;
 }
 
-.post-item, .hidden-item, .ngid-item {
+.post-item,
+.hidden-item,
+.ngid-item {
     display: flex;
     align-items: center;
     padding: 12px;
     border-bottom: 1px solid #e0e0e0;
     color: #333;
 }
-.post-item:hover, .hidden-item:hover, .ngid-item:hover {
+
+.post-item:hover,
+.hidden-item:hover,
+.ngid-item:hover {
     background-color: #f0f0f0;
 }
 
-.post-content, .hidden-content, .ngid-text {
+.post-content,
+.hidden-content,
+.ngid-text {
     flex-grow: 1;
     overflow: hidden;
 }
-.post-content { cursor: pointer; }
-.hidden-content, .ngid-text { font-weight: bold; }
-.ngid-text { font-family: monospace; }
+
+.post-content {
+    cursor: pointer;
+}
+
+.hidden-content,
+.ngid-text {
+    font-weight: bold;
+}
+
+.ngid-text {
+    font-family: monospace;
+}
 
 .post-title {
     font-weight: bold;
     color: #333;
 }
+
 .post-preview {
     margin-top: 6px;
     font-size: 13px;
@@ -103,32 +125,71 @@ body {
     font-size: 12px;
     transition: all 0.2s;
 }
-.delete-btn { color: #d9534f; }
-.delete-btn:hover { background-color: #d9534f; color: white; border-color: #c9302c; }
-.unhide-btn { color: #28a745; }
-.unhide-btn:hover { background-color: #28a745; color: white; border-color: #218838; }
+
+.delete-btn {
+    color: #d9534f;
+}
+
+.delete-btn:hover {
+    background-color: #d9534f;
+    color: white;
+    border-color: #c9302c;
+}
+
+.unhide-btn {
+    color: #28a745;
+}
+
+.unhide-btn:hover {
+    background-color: #28a745;
+    color: white;
+    border-color: #218838;
+}
 
 .footer {
     padding: 8px 12px;
     background-color: #f0f0f0;
     border-top: 1px solid #ccc;
 }
+
 .setting-row {
     display: flex;
     justify-content: space-between;
     align-items: center;
 }
-.setting-row:not(:last-child) { margin-bottom: 8px; }
-.setting-item label { display: inline-flex; align-items: center; cursor: pointer; font-size: 13px; color: #333; }
-.setting-item input[type="checkbox"] { margin-right: 6px; }
-.setting-item input[type="number"] { width: 50px; margin-left: 8px; border: 1px solid #ccc; border-radius: 3px; padding: 2px 4px; }
 
-#empty-message, .loader {
+.setting-row:not(:last-child) {
+    margin-bottom: 8px;
+}
+
+.setting-item label {
+    display: inline-flex;
+    align-items: center;
+    cursor: pointer;
+    font-size: 13px;
+    color: #333;
+}
+
+.setting-item input[type="checkbox"] {
+    margin-right: 6px;
+}
+
+.setting-item input[type="number"] {
+    width: 50px;
+    margin-left: 8px;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+    padding: 2px 4px;
+}
+
+#empty-message,
+.loader {
     padding: 30px;
     text-align: center;
     color: #888;
     font-size: 15px;
 }
+
 .loader {
     padding: 15px;
     font-size: 14px;
@@ -139,12 +200,14 @@ body {
     padding: 10px;
     border-bottom: 1px solid #e0e0e0;
 }
+
 #ngid-input {
     flex-grow: 1;
     border: 1px solid #ccc;
     padding: 6px;
     border-radius: 4px;
 }
+
 #add-ngid-btn {
     margin-left: 8px;
     padding: 6px 12px;
@@ -154,9 +217,11 @@ body {
     border-radius: 4px;
     cursor: pointer;
 }
-#add-ngid-btn:hover { background-color: #0056b3; }
 
-/* 新增手動重載按鈕的樣式 */
+#add-ngid-btn:hover {
+    background-color: #0056b3;
+}
+
 .manual-action-area {
     margin-top: 10px;
     padding-top: 10px;

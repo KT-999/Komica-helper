@@ -1,10 +1,12 @@
 <!DOCTYPE html>
 <html lang="zh-Hant">
+
 <head>
     <meta charset="UTF-8">
     <title>Komica 貼文記憶器</title>
     <link rel="stylesheet" href="popup.css">
 </head>
+
 <body>
     <div class="header">
         <div class="tabs">
@@ -35,18 +37,18 @@
             </div>
         </div>
         <div class="setting-row" id="auto-check-settings">
-             <div class="setting-item">
+            <div class="setting-item">
                 <label><input type="checkbox" id="auto-check-enabled"><span>啟用自動更新</span></label>
             </div>
-             <div class="setting-item">
+            <div class="setting-item">
                 <label><span>檢查頻率(秒):</span><input type="number" id="check-interval-input" min="60"></label>
             </div>
         </div>
-        <!-- 新增的手動重載區域 -->
         <div class="manual-action-area">
-            <button id="reapply-ng-btn">在目前分頁重載 [NG] 功能</button>
+            <button id="reapply-ng-btn">在目前分頁重載功能</button>
         </div>
     </div>
     <script src="popup.js"></script>
 </body>
+
 </html>
