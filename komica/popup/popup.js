@@ -108,6 +108,7 @@ function createSavedPostElement(post) {
     content.appendChild(previewDiv);
     
     content.addEventListener('click', async () => {
+        const { openInNewTab } = await browser.storage.local.get({ openInNewTab: true });
         let targetUrl;
         if (post.hasUpdate && post.firstNewReplyNo) {
             targetUrl = `${post.url.split('#')[0]}#r${post.firstNewReplyNo}`;
@@ -121,15 +122,20 @@ function createSavedPostElement(post) {
         
         const baseUrl = post.url.split('#')[0];
         const existingTabs = await browser.tabs.query({ url: `${baseUrl}*` });
+        const [currentTab] = await browser.tabs.query({ active: true, currentWindow: true });
 
-        if (existingTabs.length > 0) {
+        if (openInNewTab) {
+            browser.tabs.create({
+                url: targetUrl,
+                index: currentTab ? currentTab.index + 1 : undefined
+            });
+        } else if (existingTabs.length > 0) {
             const reloadUrl = new URL(targetUrl);
             reloadUrl.searchParams.set('_ktr', Date.now());
             const finalUrl = reloadUrl.href;
             browser.tabs.update(existingTabs[0].id, { active: true, url: finalUrl });
-        } else {
-            const [currentTab] = await browser.tabs.query({ active: true, currentWindow: true });
-            browser.tabs.create({ url: targetUrl, index: currentTab.index + 1 });
+        } else if (currentTab) {
+            browser.tabs.update(currentTab.id, { url: targetUrl });
         }
         window.close();
     });

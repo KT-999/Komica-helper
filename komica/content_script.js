@@ -7,6 +7,7 @@
  */
 
 let currentNgIds = [];
+let savedPostIds = new Set();
 
 // --- 帶重試的訊息傳送 ---
 async function sendMessageWithRetry(message, maxRetries = 3, delay = 100) {
@@ -30,6 +31,11 @@ async function sendMessageWithRetry(message, maxRetries = 3, delay = 100) {
 browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
     switch (message.action) {
         case 'updateButtonUI':
+            if (message.isSaved) {
+                savedPostIds.add(`post-${message.postNo}`);
+            } else {
+                savedPostIds.delete(`post-${message.postNo}`);
+            }
             updateSaveButtonAppearance(message.postNo, message.isSaved);
             break;
         case 'unhideThread':
@@ -108,6 +114,7 @@ async function hideStoredThreads() {
     const { success, data: hiddenThreads } = await sendMessageWithRetry({ action: 'getHiddenThreads' });
     if (!success || !hiddenThreads || hiddenThreads.length === 0) return;
 
+
     hiddenThreads.forEach(threadNo => {
         const threadElement = document.querySelector(`.thread[data-no="${threadNo}"]`);
         if (threadElement) {
@@ -115,6 +122,13 @@ async function hideStoredThreads() {
         }
     });
 }
+
+async function refreshSavedPostsCache() {
+    const { success, data: savedPosts } = await sendMessageWithRetry({ action: 'getAllPosts' });
+    if (!success || !savedPosts) return;
+    savedPostIds = new Set(savedPosts.map(post => post.id));
+}
+
 
 function addSaveButtonToPost(postElement) {
     const postNo = postElement.dataset.no;
@@ -148,8 +162,15 @@ function addSaveButtonToPost(postElement) {
             lastCheckedReplyNo: lastReplyNo, hasUpdate: false, newReplyCount: 0,
             firstNewReplyNo: null
         };
+        const postId = postData.id;
+        const wasSaved = savedPostIds.has(postId);
         await sendMessageWithRetry({ action: 'toggleSavePost', data: postData });
-        await updateSaveButtonState(saveButton, postNo);
+        if (wasSaved) {
+            savedPostIds.delete(postId);
+        } else {
+            savedPostIds.add(postId);
+        }
+        updateSaveButtonAppearance(postNo, !wasSaved);
     });
 
     const postHead = postElement.querySelector('.post-head');
@@ -238,10 +259,8 @@ function updateSaveButtonAppearance(postNo, isSaved) {
 }
 
 async function updateSaveButtonState(button, postNo) {
-    const result = await sendMessageWithRetry({ action: 'isPostSaved', postNo: postNo });
-    if (result && result.success) {
-        updateSaveButtonAppearance(postNo, result.isSaved);
-    }
+    const isSaved = savedPostIds.has(`post-${postNo}`);
+    updateSaveButtonAppearance(postNo, isSaved);
 }
 
 function updateNgIdButtonState(button, ngId) {
@@ -287,6 +306,7 @@ function setupObserver() {
 }
 
 async function initialize() {
+    await refreshSavedPostsCache();
     await applyNgIdFilter();
     processElements();
     proactiveUpdateReset();

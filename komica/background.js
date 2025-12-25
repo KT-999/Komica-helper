@@ -71,24 +71,20 @@ async function checkPostUpdates() {
     const { savedPosts } = await browser.storage.local.get({ savedPosts: [] });
     if (!savedPosts || savedPosts.length === 0) return;
     let hasChanges = false;
-    const parser = new DOMParser();
     for (const post of savedPosts) {
         if (typeof post.initialReplyNo === 'undefined') continue;
         try {
             const response = await fetch(post.url);
             if (!response.ok) continue;
             const htmlText = await response.text();
-            const doc = parser.parseFromString(htmlText, 'text/html');
-            const allReplies = Array.from(doc.querySelectorAll('.post.reply'));
-            const opPost = doc.querySelector('.post.threadpost');
-            if (!opPost) continue;
-            const lastPostOnPage = allReplies.length > 0 ? allReplies[allReplies.length - 1] : opPost;
-            const newLastReplyNo = parseInt(lastPostOnPage.dataset.no, 10);
+            const { replyNos, threadPostNo } = parseThreadData(htmlText);
+            if (!threadPostNo) continue;
+            const newLastReplyNo = replyNos.length > 0 ? Math.max(...replyNos) : threadPostNo;
             if (newLastReplyNo > post.lastCheckedReplyNo) {
-                const newRepliesSinceLastView = allReplies.filter(r => parseInt(r.dataset.no, 10) > post.initialReplyNo);
+                const newRepliesSinceLastView = replyNos.filter(replyNo => replyNo > post.initialReplyNo);
 
                 if (newRepliesSinceLastView.length > 0 && !post.hasUpdate) {
-                    post.firstNewReplyNo = parseInt(newRepliesSinceLastView[0].dataset.no, 10);
+                    post.firstNewReplyNo = Math.min(...newRepliesSinceLastView);
                 }
 
                 post.lastCheckedReplyNo = newLastReplyNo;
@@ -102,6 +98,34 @@ async function checkPostUpdates() {
         await browser.storage.local.set({ savedPosts });
         await updateBadge();
     }
+}
+
+function parseThreadData(htmlText) {
+    const replyNos = new Set();
+    const replyPatterns = [
+        /class="post reply"[^>]*data-no="(\d+)"/g,
+        /data-no="(\d+)"[^>]*class="post reply"/g
+    ];
+    for (const pattern of replyPatterns) {
+        for (const match of htmlText.matchAll(pattern)) {
+            replyNos.add(parseInt(match[1], 10));
+        }
+    }
+
+    const threadPatterns = [
+        /class="post threadpost"[^>]*data-no="(\d+)"/,
+        /data-no="(\d+)"[^>]*class="post threadpost"/
+    ];
+    let threadPostNo = null;
+    for (const pattern of threadPatterns) {
+        const match = htmlText.match(pattern);
+        if (match) {
+            threadPostNo = parseInt(match[1], 10);
+            break;
+        }
+    }
+
+    return { replyNos: Array.from(replyNos), threadPostNo };
 }
 
 async function cleanupOldRecords() {
