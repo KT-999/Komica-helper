@@ -68,21 +68,7 @@ async function applyNgIdFilter() {
     });
 
     document.querySelectorAll('.post').forEach(postElement => {
-        const idElement = postElement.querySelector('.id');
-        if (idElement) {
-            const currentId = idElement.dataset.id;
-            const shouldHide = currentNgIds.includes(currentId);
-            let targetElement = postElement.classList.contains('threadpost') ? postElement.closest('.thread') : postElement;
-            if (!targetElement) targetElement = postElement;
-
-            if (shouldHide) {
-                targetElement.style.display = 'none';
-                targetElement.dataset.hiddenByNgid = currentId;
-            } else if (targetElement.dataset.hiddenByNgid === currentId) {
-                targetElement.style.display = '';
-                delete targetElement.dataset.hiddenByNgid;
-            }
-        }
+        applyNgIdFilterToElement(postElement);
     });
 }
 
@@ -95,6 +81,23 @@ function unhidePostsByNgId(ngId) {
     document.querySelectorAll(`.komica-ngid-btn[data-ngid="${ngId}"]`).forEach(btn => {
         updateNgIdButtonState(btn, ngId);
     });
+}
+
+function applyNgIdFilterToElement(postElement) {
+    const idElement = postElement.querySelector('.id');
+    if (!idElement) return;
+    const currentId = idElement.dataset.id;
+    const shouldHide = currentNgIds.includes(currentId);
+    let targetElement = postElement.classList.contains('threadpost') ? postElement.closest('.thread') : postElement;
+    if (!targetElement) targetElement = postElement;
+
+    if (shouldHide) {
+        targetElement.style.display = 'none';
+        targetElement.dataset.hiddenByNgid = currentId;
+    } else if (targetElement.dataset.hiddenByNgid === currentId) {
+        targetElement.style.display = '';
+        delete targetElement.dataset.hiddenByNgid;
+    }
 }
 
 async function proactiveUpdateReset() {
@@ -287,6 +290,7 @@ function setupObserver() {
                         if (node.matches('.post')) {
                             addSaveButtonToPost(node);
                             addNgIdButtonToPost(node);
+                            applyNgIdFilterToElement(node);
                         }
                         if (node.matches('.thread')) {
                             addHideButtonToThread(node);
@@ -294,6 +298,7 @@ function setupObserver() {
                         node.querySelectorAll('.post').forEach(post => {
                             addSaveButtonToPost(post);
                             addNgIdButtonToPost(post);
+                            applyNgIdFilterToElement(post);
                         });
                         node.querySelectorAll('.thread').forEach(addHideButtonToThread);
                     }
@@ -315,4 +320,3 @@ async function initialize() {
 }
 
 initialize();
-
