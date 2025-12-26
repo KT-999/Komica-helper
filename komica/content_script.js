@@ -132,6 +132,7 @@ async function refreshSavedPostsCache() {
     savedPostIds = new Set(savedPosts.map(post => post.id));
 }
 
+
 function addSaveButtonToPost(postElement) {
     const postNo = postElement.dataset.no;
     if (!postNo) {
@@ -140,11 +141,14 @@ function addSaveButtonToPost(postElement) {
     }
     if (postElement.querySelector('.komica-saver-btn')) return;
 
+
     const saveButton = document.createElement('span');
     saveButton.className = 'komica-saver-btn text-button';
     saveButton.style.marginLeft = '5px';
     saveButton.style.cursor = 'pointer';
     saveButton.title = '點擊以儲存或取消儲存此貼文';
+    saveButton.dataset.postNo = postNo;
+    setSaveButtonAppearance(saveButton, savedPostIds.has(`post-${postNo}`));
     updateSaveButtonState(saveButton, postNo);
 
     saveButton.addEventListener('click', async () => {
@@ -275,6 +279,13 @@ function setSaveButtonAppearance(button, isSaved) {
     button.textContent = isSaved ? '[已記憶]' : '[記憶此串]';
     button.style.color = isSaved ? '#28a745' : '';
     button.style.fontWeight = isSaved ? 'bold' : '';
+}
+
+
+
+async function updateSaveButtonState(button, postNo) {
+    const isSaved = savedPostIds.has(`post-${postNo}`);
+    updateSaveButtonAppearance(postNo, isSaved);
 }
 
 function updateNgIdButtonState(button, ngId) {
