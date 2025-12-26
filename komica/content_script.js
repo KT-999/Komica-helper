@@ -132,10 +132,13 @@ async function refreshSavedPostsCache() {
     savedPostIds = new Set(savedPosts.map(post => post.id));
 }
 
-
 function addSaveButtonToPost(postElement) {
     const postNo = postElement.dataset.no;
-    if (!postNo || postElement.querySelector('.komica-saver-btn')) return;
+    if (!postNo) {
+        console.warn('Komica Helper: 無法取得貼文編號，略過加入記憶按鈕。', postElement);
+        return;
+    }
+    if (postElement.querySelector('.komica-saver-btn')) return;
 
     const saveButton = document.createElement('span');
     saveButton.className = 'komica-saver-btn text-button';
@@ -177,16 +180,19 @@ function addSaveButtonToPost(postElement) {
     });
 
     const postHead = postElement.querySelector('.post-head');
-    if (postHead) {
-        const replyLink = postHead.querySelector('.rlink');
-        if (replyLink) {
-            replyLink.after(saveButton);
-        } else {
-            const delButton = postHead.querySelector('.-del-button');
-            if (delButton) delButton.before(saveButton);
-            else postHead.appendChild(saveButton);
-        }
+    if (!postHead) {
+        console.warn(`Komica Helper: 貼文 No.${postNo} 找不到 post-head，無法插入記憶按鈕。`, postElement);
+        return;
     }
+    const replyLink = postHead.querySelector('.rlink');
+    if (replyLink) {
+        replyLink.after(saveButton);
+    } else {
+        const delButton = postHead.querySelector('.-del-button');
+        if (delButton) delButton.before(saveButton);
+        else postHead.appendChild(saveButton);
+    }
+    console.info(`Komica Helper: 已加入記憶按鈕至貼文 No.${postNo}`);
 }
 
 function addHideButtonToThread(threadElement) {
@@ -254,16 +260,21 @@ function updateSaveButtonAppearance(postNo, isSaved) {
     if (postElement) {
         const saveButton = postElement.querySelector('.komica-saver-btn');
         if (saveButton) {
-            saveButton.textContent = isSaved ? '[已記憶]' : '[記憶此串]';
-            saveButton.style.color = isSaved ? '#28a745' : '';
-            saveButton.style.fontWeight = isSaved ? 'bold' : '';
+            setSaveButtonAppearance(saveButton, isSaved);
         }
     }
 }
 
 async function updateSaveButtonState(button, postNo) {
     const isSaved = savedPostIds.has(`post-${postNo}`);
-    updateSaveButtonAppearance(postNo, isSaved);
+    setSaveButtonAppearance(button, isSaved);
+}
+
+function setSaveButtonAppearance(button, isSaved) {
+    if (!button) return;
+    button.textContent = isSaved ? '[已記憶]' : '[記憶此串]';
+    button.style.color = isSaved ? '#28a745' : '';
+    button.style.fontWeight = isSaved ? 'bold' : '';
 }
 
 function updateNgIdButtonState(button, ngId) {
