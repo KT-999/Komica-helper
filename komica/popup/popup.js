@@ -124,16 +124,16 @@ function createSavedPostElement(post) {
         const existingTabs = await browser.tabs.query({ url: `${baseUrl}*` });
         const [currentTab] = await browser.tabs.query({ active: true, currentWindow: true });
 
-        if (openInNewTab) {
-            browser.tabs.create({
-                url: targetUrl,
-                index: currentTab ? currentTab.index + 1 : undefined
-            });
-        } else if (existingTabs.length > 0) {
+        if (existingTabs.length > 0) {
             const reloadUrl = new URL(targetUrl);
             reloadUrl.searchParams.set('_ktr', Date.now());
             const finalUrl = reloadUrl.href;
             browser.tabs.update(existingTabs[0].id, { active: true, url: finalUrl });
+        } else if (openInNewTab) {
+            browser.tabs.create({
+                url: targetUrl,
+                index: currentTab ? currentTab.index + 1 : undefined
+            });
         } else if (currentTab) {
             browser.tabs.update(currentTab.id, { url: targetUrl });
         }
