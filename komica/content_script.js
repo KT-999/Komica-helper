@@ -57,6 +57,46 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
 });
 
+function shouldIgnoreHotkey(event) {
+    if (event.defaultPrevented || event.repeat) return true;
+    if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return true;
+    const target = event.target;
+    if (!target) return false;
+    if (target.isContentEditable) return true;
+    const tagName = target.tagName ? target.tagName.toLowerCase() : '';
+    return tagName === 'input' || tagName === 'textarea' || tagName === 'select';
+}
+
+function setupHotkeys() {
+    document.addEventListener('keydown', (event) => {
+        if (event.key !== 'r' && event.key !== 'R') return;
+        if (shouldIgnoreHotkey(event)) return;
+        console.info('Komica Helper: 偵測到 R 鍵，執行「在目前分頁重載功能」。');
+        processElements();
+        applyNgIdFilter();
+    });
+}
+
+function shouldIgnoreHotkey(event) {
+    if (event.defaultPrevented || event.repeat) return true;
+    if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return true;
+    const target = event.target;
+    if (!target) return false;
+    if (target.isContentEditable) return true;
+    const tagName = target.tagName ? target.tagName.toLowerCase() : '';
+    return tagName === 'input' || tagName === 'textarea' || tagName === 'select';
+}
+
+function setupHotkeys() {
+    document.addEventListener('keydown', (event) => {
+        if (event.key !== 'r' && event.key !== 'R') return;
+        if (shouldIgnoreHotkey(event)) return;
+        console.log('收到 R 鍵快捷鍵，重新處理頁面元素...');
+        processElements();
+        applyNgIdFilter();
+    });
+}
+
 // --- 核心功能 ---
 async function applyNgIdFilter() {
     const { success, data: ngIds } = await sendMessageWithRetry({ action: 'getNgIds' });
@@ -339,6 +379,9 @@ async function initialize() {
     proactiveUpdateReset();
     hideStoredThreads();
     setupObserver();
+    setupHotkeys();
 }
+
+
 
 initialize();
