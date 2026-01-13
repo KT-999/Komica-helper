@@ -11,6 +11,7 @@ document.addEventListener('DOMContentLoaded', () => {
     loadSavedPosts();
     setupNgIdTab();
     setupReapplyButton(); // 補入功能
+    setVersionInfo();
 });
 
 // --- 分頁管理 ---
@@ -276,6 +277,17 @@ function setupReapplyButton() {
         btn.disabled = true;
         setTimeout(() => window.close(), 1000);
     });
+}
+
+function setVersionInfo() {
+    const versionElement = document.getElementById('app-version');
+    if (!versionElement) return;
+    const manifest = (typeof browser !== 'undefined' && browser.runtime && browser.runtime.getManifest)
+        ? browser.runtime.getManifest()
+        : (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.getManifest)
+            ? chrome.runtime.getManifest()
+            : null;
+    versionElement.textContent = manifest && manifest.version ? manifest.version : '未知';
 }
 
 async function initializeSettings() {
