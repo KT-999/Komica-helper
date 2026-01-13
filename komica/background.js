@@ -192,14 +192,14 @@ async function removeNgId(ngId) {
 
 async function getHiddenThreads() {
     const { hiddenThreads } = await browser.storage.local.get({ hiddenThreads: [] });
-    const ids = hiddenThreads.map(item => item.id || item);
-    return { success: true, data: ids };
+    const records = hiddenThreads.map(item => (typeof item === 'string' ? { id: item, addedAt: null } : item));
+    return { success: true, data: records };
 }
 
 async function getNgIds() {
     const { ngIds } = await browser.storage.local.get({ ngIds: [] });
-    const ids = ngIds.map(item => item.id || item);
-    return { success: true, data: ids };
+    const records = ngIds.map(item => (typeof item === 'string' ? { id: item, addedAt: null } : item));
+    return { success: true, data: records };
 }
 
 async function updateCheckAlarm() {

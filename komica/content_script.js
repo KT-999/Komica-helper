@@ -99,9 +99,9 @@ function setupHotkeys() {
 
 // --- 核心功能 ---
 async function applyNgIdFilter() {
-    const { success, data: ngIds } = await sendMessageWithRetry({ action: 'getNgIds' });
+    const { success, data: ngIdRecords } = await sendMessageWithRetry({ action: 'getNgIds' });
     if (!success) return;
-    currentNgIds = ngIds || [];
+    currentNgIds = (ngIdRecords || []).map(item => item.id || item);
 
     document.querySelectorAll('.komica-ngid-btn').forEach(btn => {
         updateNgIdButtonState(btn, btn.dataset.ngid);
@@ -154,7 +154,8 @@ async function proactiveUpdateReset() {
 }
 
 async function hideStoredThreads() {
-    const { success, data: hiddenThreads } = await sendMessageWithRetry({ action: 'getHiddenThreads' });
+    const { success, data: hiddenThreadRecords } = await sendMessageWithRetry({ action: 'getHiddenThreads' });
+    const hiddenThreads = (hiddenThreadRecords || []).map(item => item.id || item);
     if (!success || !hiddenThreads || hiddenThreads.length === 0) return;
 
 

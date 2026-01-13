@@ -59,7 +59,7 @@ async function loadHiddenThreads() {
         const response = await browser.runtime.sendMessage({ action: 'getHiddenThreads' });
         container.innerHTML = '';
         if (response && response.success && response.data.length > 0) {
-            response.data.forEach(threadNo => container.appendChild(createHiddenThreadElement(threadNo)));
+            response.data.forEach(record => container.appendChild(createHiddenThreadElement(record)));
         } else {
             container.innerHTML = '<div id="empty-message">沒有已隱藏的串</div>';
         }
@@ -74,7 +74,7 @@ async function loadNgIds() {
     const response = await browser.runtime.sendMessage({ action: 'getNgIds' });
     container.innerHTML = '';
     if (response && response.success && response.data.length > 0) {
-        response.data.forEach(ngId => container.appendChild(createNgIdElement(ngId)));
+        response.data.forEach(record => container.appendChild(createNgIdElement(record)));
     } else {
         container.innerHTML = '<div id="empty-message">沒有已封鎖的 ID</div>';
     }
@@ -156,12 +156,23 @@ function createSavedPostElement(post) {
     return item;
 }
 
-function createHiddenThreadElement(threadNo) {
+function createHiddenThreadElement(record) {
+    const threadNo = record.id || record;
     const item = document.createElement('div');
     item.className = 'hidden-item';
     const content = document.createElement('div');
     content.className = 'hidden-content';
-    content.textContent = `No. ${threadNo}`;
+
+    const title = document.createElement('div');
+    title.className = 'item-title';
+    title.textContent = `No. ${threadNo}`;
+
+    const meta = document.createElement('div');
+    meta.className = 'item-meta';
+    meta.textContent = formatTimestamp(record.addedAt);
+
+    content.appendChild(title);
+    content.appendChild(meta);
     const unhideBtn = document.createElement('button');
     unhideBtn.className = 'action-btn unhide-btn';
     unhideBtn.textContent = '解除隱藏';
@@ -178,14 +189,25 @@ function createHiddenThreadElement(threadNo) {
     return item;
 }
 
-function createNgIdElement(ngId) {
+function createNgIdElement(record) {
+    const ngId = record.id || record;
     const item = document.createElement('div');
     item.className = 'ngid-item';
     
-    const ngIdSpan = document.createElement('span');
+    const content = document.createElement('div');
+    content.className = 'ngid-content';
+
+    const ngIdSpan = document.createElement('div');
     ngIdSpan.className = 'ngid-text';
     ngIdSpan.textContent = ngId;
-    item.appendChild(ngIdSpan);
+
+    const meta = document.createElement('div');
+    meta.className = 'item-meta';
+    meta.textContent = formatTimestamp(record.addedAt);
+
+    content.appendChild(ngIdSpan);
+    content.appendChild(meta);
+    item.appendChild(content);
 
     const removeBtn = document.createElement('button');
     removeBtn.className = 'action-btn delete-btn';
@@ -200,6 +222,14 @@ function createNgIdElement(ngId) {
     });
     item.appendChild(removeBtn);
     return item;
+}
+
+function formatTimestamp(value) {
+    if (!value) return '加入時間：未知';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '加入時間：未知';
+    const formatted = date.toLocaleString('zh-TW', { hour12: false });
+    return `加入時間：${formatted}`;
 }
 
 // --- 設定管理 ---
