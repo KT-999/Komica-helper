@@ -157,14 +157,7 @@ async function hideStoredThreads() {
     const { success, data: hiddenThreadRecords } = await sendMessageWithRetry({ action: 'getHiddenThreads' });
     const hiddenThreads = (hiddenThreadRecords || []).map(item => item.id || item);
     if (!success || !hiddenThreads || hiddenThreads.length === 0) return;
-
-
-    hiddenThreads.forEach(threadNo => {
-        const threadElement = document.querySelector(`.thread[data-no="${threadNo}"]`);
-        if (threadElement) {
-            threadElement.style.display = 'none';
-        }
-    });
+    applyHiddenThreads(hiddenThreads);
 }
 
 async function refreshSavedPostsCache() {
@@ -254,6 +247,7 @@ function addHideButtonToThread(threadElement) {
 
     hideButton.addEventListener('click', async () => {
         threadElement.style.display = 'none';
+        threadElement.dataset.hiddenByThread = 'true';
         hideButton.textContent = '[已隱藏]';
         await sendMessageWithRetry({ action: 'hideThread', threadNo: threadNo });
     });
@@ -281,8 +275,12 @@ function addNgIdButtonToPost(postElement) {
     ngButton.addEventListener('click', async () => {
         const isCurrentlyNg = currentNgIds.includes(ngId);
         if (isCurrentlyNg) {
+            unhidePostsByNgId(ngId);
             await sendMessageWithRetry({ action: 'removeNgId', ngId: ngId });
         } else {
+            currentNgIds = [...new Set([...currentNgIds, ngId])];
+            updateNgIdButtonsForId(ngId);
+            applyNgIdFilterToAllPosts();
             await sendMessageWithRetry({ action: 'addNgId', ngId: ngId });
         }
     });
@@ -336,6 +334,39 @@ function updateNgIdButtonState(button, ngId) {
     button.title = isNg ? `點擊以將 ID:${ngId} 從 NG 列表中移除` : `點擊以將 ID:${ngId} 加入 NG 列表`;
 }
 
+function applyHiddenThreads(hiddenThreads) {
+    const hiddenSet = new Set(hiddenThreads);
+    document.querySelectorAll('.thread').forEach(threadElement => {
+        const threadNo = threadElement.dataset.no;
+        if (!threadNo) return;
+        if (hiddenSet.has(threadNo)) {
+            threadElement.style.display = 'none';
+            threadElement.dataset.hiddenByThread = 'true';
+        } else if (threadElement.dataset.hiddenByThread) {
+            threadElement.style.display = '';
+            delete threadElement.dataset.hiddenByThread;
+            const button = threadElement.querySelector('.komica-hider-btn');
+            if (button) button.textContent = '[隱藏此串]';
+        }
+    });
+}
+
+function normalizeRecordIds(records) {
+    return (records || []).map(item => item.id || item);
+}
+
+function updateNgIdButtonsForId(ngId) {
+    document.querySelectorAll(`.komica-ngid-btn[data-ngid="${ngId}"]`).forEach(button => {
+        updateNgIdButtonState(button, ngId);
+    });
+}
+
+function applyNgIdFilterToAllPosts() {
+    document.querySelectorAll('.post').forEach(postElement => {
+        applyNgIdFilterToElement(postElement);
+    });
+}
+
 function processElements() {
     document.querySelectorAll('.post').forEach(post => {
         addSaveButtonToPost(post);
@@ -374,6 +405,15 @@ function setupObserver() {
 }
 
 async function initialize() {
+    if (!document.body) {
+        await new Promise(resolve => {
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', resolve, { once: true });
+            } else {
+                resolve();
+            }
+        });
+    }
     await refreshSavedPostsCache();
     await applyNgIdFilter();
     processElements();
@@ -381,6 +421,31 @@ async function initialize() {
     hideStoredThreads();
     setupObserver();
     setupHotkeys();
+    if (browser.storage && browser.storage.onChanged) {
+        browser.storage.onChanged.addListener((changes, areaName) => {
+            if (areaName !== 'local') return;
+            if (changes.ngIds) {
+                currentNgIds = normalizeRecordIds(changes.ngIds.newValue);
+                applyNgIdFilterToAllPosts();
+                document.querySelectorAll('.komica-ngid-btn').forEach(button => {
+                    updateNgIdButtonState(button, button.dataset.ngid);
+                });
+            }
+            if (changes.hiddenThreads) {
+                const hiddenThreads = normalizeRecordIds(changes.hiddenThreads.newValue);
+                applyHiddenThreads(hiddenThreads);
+            }
+        });
+    }
+
+    window.addEventListener('load', () => {
+        processElements();
+        applyNgIdFilter();
+    });
+    setTimeout(() => {
+        processElements();
+        applyNgIdFilter();
+    }, 1000);
 }
 
 
