@@ -77,26 +77,6 @@ function setupHotkeys() {
     });
 }
 
-function shouldIgnoreHotkey(event) {
-    if (event.defaultPrevented || event.repeat) return true;
-    if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return true;
-    const target = event.target;
-    if (!target) return false;
-    if (target.isContentEditable) return true;
-    const tagName = target.tagName ? target.tagName.toLowerCase() : '';
-    return tagName === 'input' || tagName === 'textarea' || tagName === 'select';
-}
-
-function setupHotkeys() {
-    document.addEventListener('keydown', (event) => {
-        if (event.key !== 'r' && event.key !== 'R') return;
-        if (shouldIgnoreHotkey(event)) return;
-        console.log('收到 R 鍵快捷鍵，重新處理頁面元素...');
-        processElements();
-        applyNgIdFilter();
-    });
-}
-
 // --- 核心功能 ---
 async function applyNgIdFilter() {
     const { success, data: ngIdRecords } = await sendMessageWithRetry({ action: 'getNgIds' });
@@ -107,9 +87,7 @@ async function applyNgIdFilter() {
         updateNgIdButtonState(btn, btn.dataset.ngid);
     });
 
-    document.querySelectorAll('.post').forEach(postElement => {
-        applyNgIdFilterToElement(postElement);
-    });
+    applyNgIdFilterToAllPosts();
 }
 
 function unhidePostsByNgId(ngId) {
@@ -214,7 +192,7 @@ function addSaveButtonToPost(postElement) {
         } else {
             savedPostIds.add(postId);
         }
-        updateSaveButtonAppearance(postNo, !wasSaved);
+        setSaveButtonAppearance(saveButton, !wasSaved);
     });
 
     const postHead = postElement.querySelector('.post-head');
@@ -308,7 +286,7 @@ function updateSaveButtonAppearance(postNo, isSaved) {
     }
 }
 
-async function updateSaveButtonState(button, postNo) {
+function updateSaveButtonState(button, postNo) {
     const isSaved = savedPostIds.has(`post-${postNo}`);
     setSaveButtonAppearance(button, isSaved);
 }
@@ -318,13 +296,6 @@ function setSaveButtonAppearance(button, isSaved) {
     button.textContent = isSaved ? '[已記憶]' : '[記憶此串]';
     button.style.color = isSaved ? '#28a745' : '';
     button.style.fontWeight = isSaved ? 'bold' : '';
-}
-
-
-
-async function updateSaveButtonState(button, postNo) {
-    const isSaved = savedPostIds.has(`post-${postNo}`);
-    updateSaveButtonAppearance(postNo, isSaved);
 }
 
 function updateNgIdButtonState(button, ngId) {
