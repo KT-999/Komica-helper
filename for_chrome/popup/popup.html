@@ -1,49 +1,121 @@
 <!DOCTYPE html>
 <html lang="zh-Hant">
+
 <head>
     <meta charset="UTF-8">
     <title>Komica 貼文記憶器</title>
     <link rel="stylesheet" href="popup.css">
 </head>
+
 <body>
     <div class="header">
         <div class="tabs">
-            <button id="tab-saved" class="tab-btn active" data-target="saved-posts-container">已記憶</button>
+            <button id="tab-saved" class="tab-btn active" data-target="saved-posts-panel">已記憶</button>
             <button id="tab-hidden" class="tab-btn" data-target="hidden-threads-container">已隱藏</button>
-            <button id="tab-ngid" class="tab-btn" data-target="ngid-container">NGID 管理</button>
+            <button id="tab-filter" class="tab-btn" data-target="filter-container">過濾管理</button>
+            <button id="tab-settings" class="tab-btn" data-target="settings-container">設定/備份</button>
         </div>
     </div>
 
     <!-- 內容面板 -->
-    <div id="saved-posts-container" class="content-panel active"></div>
-    <div id="hidden-threads-container" class="content-panel"></div>
-    <div id="ngid-container" class="content-panel">
-        <div class="ngid-input-area">
-            <input type="text" id="ngid-input" placeholder="輸入要封鎖的 ID">
-            <button id="add-ngid-btn">新增</button>
+    <div id="saved-posts-panel" class="content-panel active">
+        <div id="saved-actions-bar" class="sub-action-bar" style="display: none;">
+            <button id="clear-dead-btn" class="warn-btn">清理已失效貼文 (<span id="dead-count">0</span>)</button>
         </div>
-        <div id="ngid-list"></div>
+        <div id="saved-posts-container"></div>
+    </div>
+
+    <div id="hidden-threads-container" class="content-panel"></div>
+
+    <div id="filter-container" class="content-panel">
+        <div class="sub-tabs">
+            <button id="subtab-ngid" class="sub-tab-btn active" data-subtarget="ngid-subpanel">ID 黑名單</button>
+            <button id="subtab-keyword" class="sub-tab-btn" data-subtarget="keyword-subpanel">關鍵字黑名單</button>
+        </div>
+
+        <div id="ngid-subpanel" class="sub-panel active">
+            <div class="input-area">
+                <input type="text" id="ngid-input" placeholder="輸入要封鎖的 ID">
+                <button id="add-ngid-btn" class="primary-btn">新增</button>
+            </div>
+            <div id="ngid-list"></div>
+        </div>
+
+        <div id="keyword-subpanel" class="sub-panel">
+            <div class="input-area">
+                <input type="text" id="keyword-input" placeholder="輸入關鍵字 (支援 /regex/)">
+                <button id="add-keyword-btn" class="primary-btn">新增</button>
+            </div>
+            <div id="keyword-list"></div>
+        </div>
+    </div>
+
+    <div id="settings-container" class="content-panel">
+        <div class="settings-content">
+            <div class="setting-group-title">瀏覽與顯示</div>
+            <div class="setting-row">
+                <div class="setting-item">
+                    <label><input type="checkbox" id="open-in-new-tab-checkbox"><span>在新分頁中開啟</span></label>
+                </div>
+            </div>
+            <div class="setting-row">
+                <div class="setting-item">
+                    <label><input type="checkbox" id="collapse-mode-checkbox"><span>以摺疊提示條取代完全隱藏</span></label>
+                </div>
+            </div>
+            <div class="setting-row">
+                <div class="setting-item">
+                    <label><input type="checkbox" id="image-search-checkbox"><span>顯示快速搜圖按鈕 [搜圖]</span></label>
+                </div>
+            </div>
+
+            <div class="setting-group-title">更新與通知</div>
+            <div class="setting-row">
+                <div class="setting-item">
+                    <label><input type="checkbox" id="auto-check-enabled"><span>啟用背景自動檢查更新</span></label>
+                </div>
+                <div class="setting-item">
+                    <label><span>頻率(秒):</span><input type="number" id="check-interval-input" min="60"></label>
+                </div>
+            </div>
+            <div class="setting-row">
+                <div class="setting-item">
+                    <label><input type="checkbox" id="notifications-enabled"><span>新回應時發送系統桌面通知</span></label>
+                </div>
+            </div>
+
+            <div class="setting-group-title">儲存與維護</div>
+            <div class="setting-row">
+                <div class="setting-item">
+                    <label><span>最大記憶紀錄量:</span><input type="number" id="max-records-input" min="1" max="999"></label>
+                </div>
+            </div>
+            <div class="setting-row">
+                <div class="setting-item">
+                    <label><input type="checkbox" id="auto-cleanup-enabled"><span>定期清理過期舊紀錄</span></label>
+                </div>
+                <div class="setting-item">
+                    <label><span>天數:</span><input type="number" id="cleanup-days-input" min="1"></label>
+                </div>
+            </div>
+
+            <div class="setting-group-title">備份與還原</div>
+            <div class="backup-area">
+                <button id="export-backup-btn" class="backup-btn">匯出備份 (JSON)</button>
+                <button id="import-backup-btn" class="backup-btn">匯入備份 (JSON)</button>
+                <input type="file" id="import-file-input" accept=".json" style="display: none;">
+            </div>
+            <div id="import-status" class="status-msg"></div>
+        </div>
     </div>
 
     <div class="footer">
-        <div class="setting-row">
-            <div class="setting-item">
-                <label><input type="checkbox" id="open-in-new-tab-checkbox"><span>在新分頁中開啟</span></label>
-            </div>
-            <div class="setting-item">
-                <label><span>最大記錄量:</span><input type="number" id="max-records-input" min="1" max="999"></label>
-            </div>
+        <div class="manual-action-area">
+            <button id="reapply-functions-btn">在目前分頁重載功能</button>
         </div>
-        <div class="setting-row" id="auto-check-settings">
-             <div class="setting-item">
-                <label><input type="checkbox" id="auto-check-enabled"><span>啟用自動更新</span></label>
-            </div>
-             <div class="setting-item">
-                <label><span>檢查頻率(秒):</span><input type="number" id="check-interval-input" min="60"></label>
-            </div>
-        </div>
+        <div class="version-info">版本 <span id="app-version">--</span></div>
     </div>
-    <script src="../browser-polyfill.js"></script>
     <script src="popup.js"></script>
 </body>
+
 </html>

@@ -1,12 +1,20 @@
 /**
- * Komica Post Saver - Background Script (v1.6.0 Fix)
+ * Komica Post Saver - Background Script (v1.7.0.0)
  *
  * 變更：
- * 1. 新增自動清理過期「已隱藏」與「NGID」記錄的功能。
- * 2. 更新資料結構，為隱藏串和 NGID 加入時間戳。
- * 3. 新增相關的設定選項與每日執行的計時器。
- * 4. 加入資料移轉邏輯，兼容舊版使用者的資料。
+ * 1. 跨瀏覽器相容性 (Firefox / Chrome)。
+ * 2. 擴展支援網域 (komica1.org, komica.org, komica2.net, 2cat.org)。
+ * 3. 強化貼文更新檢查的回應與討論串主樓解析邏輯。
+ * 4. 新增：已失效 / 沉底 (404) 討論串偵測與清理。
+ * 5. 新增：桌面推播通知支援 (可於設定中啟用)。
+ * 6. 新增：NG 關鍵字過濾管理。
+ * 7. 新增：設定與記錄 JSON 匯出/匯入。
+ * 8. 自動清理過期「已隱藏」、「NGID」與「NG關鍵字」記錄。
  */
+
+if (typeof browser === 'undefined') {
+    var browser = chrome;
+}
 
 const CHECK_ALARM_NAME = 'komica-check-alarm';
 const CLEANUP_ALARM_NAME = 'komica-cleanup-alarm';
@@ -15,9 +23,11 @@ const CLEANUP_ALARM_NAME = 'komica-cleanup-alarm';
 browser.runtime.onInstalled.addListener(() => {
     browser.storage.local.get(null, (data) => {
         const defaults = {
-            savedPosts: [], hiddenThreads: [], ngIds: [],
+            savedPosts: [], hiddenThreads: [], ngIds: [], ngKeywords: [],
             maxRecords: 50, autoCheckEnabled: false, checkInterval: 300,
-            autoCleanupEnabled: true, cleanupDays: 30
+            autoCleanupEnabled: true, cleanupDays: 30,
+            openInNewTab: true, collapseMode: false,
+            enableNotifications: false, enableImageSearch: true
         };
         const toSet = {};
         for (const key in defaults) {
@@ -42,6 +52,7 @@ browser.runtime.onMessage.addListener(async (message) => {
         case 'toggleSavePost': return await toggleSavePost(message.data);
         case 'getAllPosts': return await getAllPosts();
         case 'deletePost': return await deletePost(message.id);
+        case 'clearDeadPosts': return await clearDeadPosts();
         case 'isPostSaved': return await isPostSaved(message.postNo);
         case 'trimRecords': return await trimRecords();
         case 'updateAlarm': return await updateCheckAlarm();
@@ -52,6 +63,11 @@ browser.runtime.onMessage.addListener(async (message) => {
         case 'addNgId': return await addNgId(message.ngId);
         case 'removeNgId': return await removeNgId(message.ngId);
         case 'getNgIds': return await getNgIds();
+        case 'addNgKeyword': return await addNgKeyword(message.keyword);
+        case 'removeNgKeyword': return await removeNgKeyword(message.keyword);
+        case 'getNgKeywords': return await getNgKeywords();
+        case 'exportData': return await exportData();
+        case 'importData': return await importData(message.payload);
         case 'runCleanup': return await cleanupOldRecords();
     }
     return true;
@@ -67,16 +83,71 @@ browser.alarms.onAlarm.addListener(async (alarm) => {
     }
 });
 
+// --- 通知點擊跳轉 ---
+if (browser.notifications && browser.notifications.onClicked) {
+    browser.notifications.onClicked.addListener(async (notificationId) => {
+        if (!notificationId.startsWith('komica-post-')) return;
+        const postId = notificationId.replace('komica-post-', '');
+        const { savedPosts, openInNewTab } = await browser.storage.local.get({ savedPosts: [], openInNewTab: true });
+        const post = savedPosts.find(p => p.id === postId);
+        if (!post) return;
+
+        let targetUrl = post.url;
+        if (post.firstNewReplyNo) {
+            targetUrl = `${post.url.split('#')[0]}#r${post.firstNewReplyNo}`;
+        }
+        await clearUpdateFlag(postId);
+
+        if (openInNewTab) {
+            browser.tabs.create({ url: targetUrl });
+        } else {
+            const tabs = await browser.tabs.query({ active: true, currentWindow: true });
+            if (tabs.length > 0) {
+                browser.tabs.update(tabs[0].id, { url: targetUrl });
+            } else {
+                browser.tabs.create({ url: targetUrl });
+            }
+        }
+    });
+}
+
 async function checkPostUpdates() {
-    const { savedPosts } = await browser.storage.local.get({ savedPosts: [] });
+    const { savedPosts, enableNotifications } = await browser.storage.local.get({ savedPosts: [], enableNotifications: false });
     if (!savedPosts || savedPosts.length === 0) return;
     let hasChanges = false;
+
     for (const post of savedPosts) {
         if (typeof post.initialReplyNo === 'undefined') continue;
         try {
             const response = await fetch(post.url);
+            // 404 / 410 表示討論串已失效或沉底
+            if (response.status === 404 || response.status === 410) {
+                if (!post.isDead) {
+                    post.isDead = true;
+                    post.deadAt = new Date().toISOString();
+                    hasChanges = true;
+                }
+                continue;
+            }
             if (!response.ok) continue;
+
             const htmlText = await response.text();
+            // 檢查 Pixmicat 錯誤頁面（串已被刪除或找不到）
+            if (htmlText.includes('找不到此貼文') || htmlText.includes('貼文不存在') || htmlText.includes('該討論串已被刪除')) {
+                if (!post.isDead) {
+                    post.isDead = true;
+                    post.deadAt = new Date().toISOString();
+                    hasChanges = true;
+                }
+                continue;
+            }
+
+            if (post.isDead) {
+                post.isDead = false;
+                delete post.deadAt;
+                hasChanges = true;
+            }
+
             const { replyNos, threadPostNo } = parseThreadData(htmlText);
             if (!threadPostNo) continue;
             const newLastReplyNo = replyNos.length > 0 ? Math.max(...replyNos) : threadPostNo;
@@ -91,6 +162,18 @@ async function checkPostUpdates() {
                 post.newReplyCount = newRepliesSinceLastView.length;
                 post.hasUpdate = true;
                 hasChanges = true;
+
+                // 桌面推播通知
+                if (enableNotifications && browser.notifications && newRepliesSinceLastView.length > 0) {
+                    try {
+                        browser.notifications.create(`komica-post-${post.id}`, {
+                            type: 'basic',
+                            iconUrl: 'icons/icon-96.png',
+                            title: 'Komica 討論串有新回應！',
+                            message: `「${post.title}」新增了 ${newRepliesSinceLastView.length} 則回應`
+                        });
+                    } catch (e) { }
+                }
             }
         } catch (error) { }
     }
@@ -104,7 +187,9 @@ function parseThreadData(htmlText) {
     const replyNos = new Set();
     const replyPatterns = [
         /class="post reply"[^>]*data-no="(\d+)"/g,
-        /data-no="(\d+)"[^>]*class="post reply"/g
+        /data-no="(\d+)"[^>]*class="post reply"/g,
+        /<div[^>]*class="[^"]*\breply\b[^"]*"[^>]*data-no="(\d+)"/g,
+        /<div[^>]*data-no="(\d+)"[^>]*class="[^"]*\breply\b[^"]*"/g
     ];
     for (const pattern of replyPatterns) {
         for (const match of htmlText.matchAll(pattern)) {
@@ -114,7 +199,9 @@ function parseThreadData(htmlText) {
 
     const threadPatterns = [
         /class="post threadpost"[^>]*data-no="(\d+)"/,
-        /data-no="(\d+)"[^>]*class="post threadpost"/
+        /data-no="(\d+)"[^>]*class="post threadpost"/,
+        /<div[^>]*class="[^"]*\bthreadpost\b[^"]*"[^>]*data-no="(\d+)"/,
+        /<div[^>]*data-no="(\d+)"[^>]*class="[^"]*\bthreadpost\b[^"]*"/
     ];
     let threadPostNo = null;
     for (const pattern of threadPatterns) {
@@ -131,10 +218,10 @@ function parseThreadData(htmlText) {
 async function cleanupOldRecords() {
     const {
         autoCleanupEnabled, cleanupDays,
-        hiddenThreads: oldHiddenThreads, ngIds: oldNgIds
+        hiddenThreads: oldHiddenThreads, ngIds: oldNgIds, ngKeywords: oldNgKeywords
     } = await browser.storage.local.get({
         autoCleanupEnabled: true, cleanupDays: 30,
-        hiddenThreads: [], ngIds: []
+        hiddenThreads: [], ngIds: [], ngKeywords: []
     });
 
     if (!autoCleanupEnabled) return { success: true, message: 'Auto-cleanup is disabled.' };
@@ -143,13 +230,19 @@ async function cleanupOldRecords() {
     threshold.setDate(threshold.getDate() - cleanupDays);
 
     const migrate = (item) => (typeof item === 'string') ? { id: item, addedAt: new Date().toISOString() } : item;
+    const migrateKeyword = (item) => (typeof item === 'string') ? { keyword: item, addedAt: new Date().toISOString() } : item;
 
     const newHiddenThreads = oldHiddenThreads.map(migrate).filter(item => new Date(item.addedAt) > threshold);
     const newNgIds = oldNgIds.map(migrate).filter(item => new Date(item.addedAt) > threshold);
+    const newNgKeywords = (oldNgKeywords || []).map(migrateKeyword).filter(item => new Date(item.addedAt) > threshold);
 
-    await browser.storage.local.set({ hiddenThreads: newHiddenThreads, ngIds: newNgIds });
+    await browser.storage.local.set({
+        hiddenThreads: newHiddenThreads,
+        ngIds: newNgIds,
+        ngKeywords: newNgKeywords
+    });
 
-    console.log(`Komica Helper: Cleanup complete. Removed ${oldHiddenThreads.length - newHiddenThreads.length} hidden threads and ${oldNgIds.length - newNgIds.length} NGIDs.`);
+    console.log(`Komica Helper: Cleanup complete. Removed ${oldHiddenThreads.length - newHiddenThreads.length} hidden threads, ${oldNgIds.length - newNgIds.length} NGIDs, and ${(oldNgKeywords || []).length - newNgKeywords.length} keywords.`);
     return { success: true };
 }
 
@@ -202,6 +295,33 @@ async function getNgIds() {
     return { success: true, data: records };
 }
 
+// --- NG 關鍵字函式 ---
+async function addNgKeyword(keyword) {
+    if (!keyword || keyword.trim() === '') return { success: false, error: 'Keyword cannot be empty' };
+    const cleaned = keyword.trim();
+    const { ngKeywords } = await browser.storage.local.get({ ngKeywords: [] });
+    if (!ngKeywords.some(item => (item.keyword || item).toLowerCase() === cleaned.toLowerCase())) {
+        ngKeywords.unshift({ keyword: cleaned, addedAt: new Date().toISOString() });
+        await browser.storage.local.set({ ngKeywords });
+        notifyAllTabs({ action: 'applyKeywordFilter' });
+    }
+    return { success: true };
+}
+
+async function removeNgKeyword(keyword) {
+    let { ngKeywords } = await browser.storage.local.get({ ngKeywords: [] });
+    const updated = ngKeywords.filter(item => (item.keyword || item).toLowerCase() !== keyword.toLowerCase());
+    await browser.storage.local.set({ ngKeywords: updated });
+    notifyAllTabs({ action: 'applyKeywordFilter' });
+    return { success: true };
+}
+
+async function getNgKeywords() {
+    const { ngKeywords } = await browser.storage.local.get({ ngKeywords: [] });
+    const records = ngKeywords.map(item => (typeof item === 'string' ? { keyword: item, addedAt: null } : item));
+    return { success: true, data: records };
+}
+
 async function updateCheckAlarm() {
     const { autoCheckEnabled, checkInterval } = await browser.storage.local.get({ autoCheckEnabled: false, checkInterval: 300 });
     await browser.alarms.clear(CHECK_ALARM_NAME);
@@ -216,7 +336,7 @@ async function setupCleanupAlarm() {
     browser.alarms.create(CLEANUP_ALARM_NAME, { periodInMinutes: 60 * 24 });
 }
 
-// --- 其他未變更的函式 ---
+// --- 貼文儲存與管理函式 ---
 async function toggleSavePost(postData) {
     const { savedPosts, maxRecords } = await browser.storage.local.get({ savedPosts: [], maxRecords: 50 });
     const existingIndex = savedPosts.findIndex(p => p.id === postData.id);
@@ -249,6 +369,15 @@ async function deletePost(postId) {
     await browser.storage.local.set({ savedPosts });
     await updateBadge();
     return { success: true };
+}
+
+async function clearDeadPosts() {
+    let { savedPosts } = await browser.storage.local.get({ savedPosts: [] });
+    const initialCount = savedPosts.length;
+    savedPosts = savedPosts.filter(p => !p.isDead);
+    await browser.storage.local.set({ savedPosts });
+    await updateBadge();
+    return { success: true, removedCount: initialCount - savedPosts.length };
 }
 
 async function clearUpdateFlag(postId) {
@@ -290,14 +419,91 @@ async function isPostSaved(postNo) {
     return { success: true, isSaved };
 }
 
-async function notifyAllTabs(message) {
-    try {
-        const tabs = await browser.tabs.query({ url: "*://*.komica1.org/*" });
-        for (const tab of tabs) {
-            try {
-                await browser.tabs.sendMessage(tab.id, message);
-            } catch (e) { }
+// --- 匯出與匯入 ---
+async function exportData() {
+    const allData = await browser.storage.local.get(null);
+    return {
+        success: true,
+        data: {
+            app: 'Komica-helper',
+            version: '1.7.0.0',
+            exportedAt: new Date().toISOString(),
+            ...allData
         }
-    } catch (e) { }
+    };
 }
 
+async function importData({ data, mode = 'merge' }) {
+    if (!data || typeof data !== 'object') {
+        return { success: false, error: '資料格式不正確' };
+    }
+    try {
+        if (mode === 'overwrite') {
+            await browser.storage.local.clear();
+            await browser.storage.local.set(data);
+        } else {
+            const current = await browser.storage.local.get(null);
+            const merged = { ...current, ...data };
+
+            // 合併 savedPosts (以 id 去重)
+            if (Array.isArray(data.savedPosts)) {
+                const map = new Map();
+                (current.savedPosts || []).forEach(p => map.set(p.id, p));
+                data.savedPosts.forEach(p => map.set(p.id, p));
+                merged.savedPosts = Array.from(map.values());
+            }
+
+            // 合併 hiddenThreads
+            if (Array.isArray(data.hiddenThreads)) {
+                const map = new Map();
+                (current.hiddenThreads || []).forEach(t => map.set(t.id || t, t));
+                data.hiddenThreads.forEach(t => map.set(t.id || t, t));
+                merged.hiddenThreads = Array.from(map.values());
+            }
+
+            // 合併 ngIds
+            if (Array.isArray(data.ngIds)) {
+                const map = new Map();
+                (current.ngIds || []).forEach(id => map.set(id.id || id, id));
+                data.ngIds.forEach(id => map.set(id.id || id, id));
+                merged.ngIds = Array.from(map.values());
+            }
+
+            // 合併 ngKeywords
+            if (Array.isArray(data.ngKeywords)) {
+                const map = new Map();
+                (current.ngKeywords || []).forEach(k => map.set((k.keyword || k).toLowerCase(), k));
+                data.ngKeywords.forEach(k => map.set((k.keyword || k).toLowerCase(), k));
+                merged.ngKeywords = Array.from(map.values());
+            }
+
+            await browser.storage.local.set(merged);
+        }
+
+        await updateCheckAlarm();
+        await updateBadge();
+        notifyAllTabs({ action: 'reapplyFunctions' });
+        return { success: true };
+    } catch (e) {
+        return { success: false, error: e.message };
+    }
+}
+
+async function notifyAllTabs(message) {
+    const patterns = [
+        "*://*.komica1.org/*",
+        "*://*.komica.org/*",
+        "*://*.komica2.net/*",
+        "*://*.2cat.org/*"
+    ];
+    for (const pattern of patterns) {
+        try {
+            const tabs = await browser.tabs.query({ url: pattern });
+            for (const tab of tabs) {
+                try {
+                    await browser.tabs.sendMessage(tab.id, message);
+                } catch (e) { }
+            }
+        } catch (e) { }
+    }
+}

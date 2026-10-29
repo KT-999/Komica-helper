@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Komica 貼文記憶器",
-  "version": "1.5.3.0",
-  "description": "在支援的 Komica 網站上新增記憶、隱藏按鈕，並提供 NGID 過濾功能，方便您追蹤與管理討論串。",
+  "version": "1.7.0.0",
+  "description": "在支援的 Komica 網站上新增記憶、隱藏按鈕，並提供 NGID 與關鍵字過濾功能，方便您追蹤與管理討論串。",
   "icons": {
     "48": "icons/icon-48.png",
     "96": "icons/icon-96.png",
@@ -11,10 +11,14 @@
   "permissions": [
     "storage",
     "tabs",
-    "alarms"
+    "alarms",
+    "notifications"
   ],
   "host_permissions": [
-    "https://*.komica1.org/*"
+    "https://*.komica1.org/*",
+    "https://*.komica.org/*",
+    "https://*.komica2.net/*",
+    "https://*.2cat.org/*"
   ],
   "background": {
     "scripts": [
@@ -24,6 +28,10 @@
   "content_scripts": [
     {
       "matches": [
+        "https://*.komica1.org/*/*",
+        "https://*.komica.org/*/*",
+        "https://*.komica2.net/*/*",
+        "https://*.2cat.org/*/*",
         "https://gita.komica1.org/*/*",
         "https://gaia.komica1.org/*/*",
         "https://atri.komica1.org/*/*",
@@ -64,6 +72,3 @@
     }
   }
 }
-
-
-
